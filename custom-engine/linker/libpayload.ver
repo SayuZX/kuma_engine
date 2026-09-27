@@ -1,0 +1,7 @@
+{
+  global:
+    __flutter_payload_start;
+    __flutter_payload_end;
+  local:
+    *;
+};
