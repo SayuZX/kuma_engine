@@ -1,0 +1,41 @@
+{
+  "description": "Pinned toolchain and source revisions for the custom packed-asset engine build. No 'latest' — reproduce with these exact revisions.",
+  "flutter": {
+    "channel_branch": "flutter-3.47-candidate.0",
+    "framework_version": "3.47.5",
+    "engine_version": "6a19cca56475dbfba1478ee68d7bd0c2ef891da1",
+    "engine_content_hash": "ab598368592da0064197e2bc15c7f5b0a2c6bb1f"
+  },
+  "dependencies": {
+    "dart_revision": "b530c21f7de367b94fb04787bfed9d8e989d75e8",
+    "skia_version": "8df24be66531469e576a806749a0202ae26b8d08"
+  },
+  "toolchain": {
+    "clang": "Fuchsia clang 23.0.0git (llvm 80743bd43fd5b38fedc503308e7a652e23d3ec93)",
+    "clang_path": "engine/src/flutter/buildtools/mac-x64/clang",
+    "gn": "2285 (81b24e01531e)",
+    "ninja": "1.11.1",
+    "android_ndk": "28.2.13676358",
+    "ndk_sysroot": "engine/src/flutter/third_party/android_tools/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot",
+    "android_target": "aarch64-linux-android24"
+  },
+  "gn_args": {
+    "target_os": "android",
+    "target_cpu": "arm64",
+    "flutter_runtime_mode": "release",
+    "is_official_build": true,
+    "optimize_for_size": false,
+    "stripped_symbols": false,
+    "is_clang": true,
+    "dart_runtime_mode": "release"
+  },
+  "host_test_build": {
+    "gen": "./flutter/tools/gn --unoptimized",
+    "out_dir": "out/host_debug_unopt",
+    "note": "host toolchain builds x86_64 on this machine (runs under Rosetta); native arm64 runtime metrics require a device"
+  },
+  "apk_step": {
+    "status": "device-gated; not pinned here",
+    "note": "Gradle, Java/JDK and Android SDK build-tools versions are to be pinned when the on-device APK milestone lands"
+  }
+}
