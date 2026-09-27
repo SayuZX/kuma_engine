@@ -16,6 +16,7 @@
 #include <string>
 #include <utility>
 
+#include "flutter/assets/packed_asset_resolver.h"
 #include "flutter/fml/cpu_affinity.h"
 #include "flutter/fml/logging.h"
 #include "flutter/fml/make_copyable.h"
@@ -32,6 +33,46 @@
 #include "flutter/shell/platform/android/platform_view_android.h"
 
 namespace flutter {
+
+namespace {
+
+extern "C" {
+__attribute__((weak)) extern const uint8_t __flutter_payload_start[];
+__attribute__((weak)) extern const uint8_t __flutter_payload_end[];
+}
+
+const uint8_t kPackedKeyPartA[32] = {
+    0x3b, 0x1e, 0x55, 0x90, 0xa2, 0x0c, 0x71, 0xf4, 0x88, 0x2d, 0x6b,
+    0xc9, 0x14, 0x7e, 0x33, 0xa0, 0x5c, 0xe1, 0x09, 0x47, 0xbb, 0x82,
+    0x36, 0xd5, 0x1f, 0x60, 0xaa, 0x0d, 0x93, 0x27, 0x4e, 0xf1};
+const uint8_t kPackedKeyPartB[32] = {
+    0x3b, 0x1f, 0x56, 0x93, 0xa6, 0x09, 0x77, 0xf3, 0x80, 0x24, 0x61,
+    0xc2, 0x18, 0x73, 0x3d, 0xaf, 0x4c, 0xf0, 0x19, 0x58, 0xab, 0x93,
+    0x28, 0xca, 0x07, 0x79, 0xb0, 0x10, 0x8f, 0x3a, 0x54, 0xee};
+
+std::unique_ptr<PackedAssetResolver> CreateEmbeddedPackedResolver() {
+  const uint8_t* start = __flutter_payload_start;
+  const uint8_t* end = __flutter_payload_end;
+  if (start == nullptr || end == nullptr || end <= start) {
+    return nullptr;
+  }
+  constexpr size_t kCacheCapacityBytes = 16 * 1024 * 1024;
+  constexpr size_t kCacheMaxItemBytes = 4 * 1024 * 1024;
+  auto cache = std::make_shared<PackedAssetCache>(kCacheCapacityBytes,
+                                                  kCacheMaxItemBytes);
+  uint8_t key[32];
+  for (size_t i = 0; i < sizeof(key); ++i) {
+    key[i] = kPackedKeyPartA[i] ^ kPackedKeyPartB[i];
+  }
+  auto resolver = std::make_unique<PackedAssetResolver>(
+      start, static_cast<size_t>(end - start), std::move(cache), key);
+  if (!resolver->IsValid()) {
+    return nullptr;
+  }
+  return resolver;
+}
+
+}  // namespace
 
 /// Inheriting ThreadConfigurer and use Android platform thread API to configure
 /// the thread priorities
@@ -337,6 +378,9 @@ std::optional<RunConfiguration> AndroidShellHolder::BuildRunConfiguration(
   }
 
   RunConfiguration config(std::move(isolate_configuration));
+  if (auto packed = CreateEmbeddedPackedResolver()) {
+    config.AddAssetResolver(std::move(packed));
+  }
   config.AddAssetResolver(apk_asset_provider_->Clone());
 
   {

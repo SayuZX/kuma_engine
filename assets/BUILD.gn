@@ -2,19 +2,92 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//flutter/testing/testing.gni")
+
 source_set("assets") {
   sources = [
+    "asset_hash.cc",
+    "asset_hash.h",
     "asset_manager.cc",
     "asset_manager.h",
     "asset_resolver.h",
     "directory_asset_bundle.cc",
     "directory_asset_bundle.h",
+    "packed_asset_cache.cc",
+    "packed_asset_cache.h",
+    "packed_asset_crypto.cc",
+    "packed_asset_crypto.h",
+    "packed_asset_resolver.cc",
+    "packed_asset_resolver.h",
   ]
 
   deps = [
     "//flutter/common",
     "//flutter/fml",
+    "//flutter/third_party/boringssl",
+    "//flutter/third_party/zlib",
   ]
 
   public_configs = [ "//flutter:config" ]
+}
+
+if (enable_unittests) {
+  executable("packed_asset_resolver_smoketest") {
+    testonly = true
+
+    sources = [
+      "asset_hash_unittests.cc",
+      "packed_asset_cache_unittests.cc",
+      "packed_asset_resolver_unittests.cc",
+    ]
+
+    deps = [
+      ":assets",
+      "//flutter/third_party/googletest:gtest",
+      "//flutter/third_party/googletest:gtest_main",
+    ]
+  }
+
+  executable("packed_asset_resolver_filecheck") {
+    testonly = true
+
+    sources = [ "packed_asset_resolver_filecheck.cc" ]
+
+    deps = [
+      ":assets",
+      "//flutter/fml",
+    ]
+  }
+
+  executable("asset_encryptor") {
+    testonly = true
+
+    sources = [ "asset_encryptor.cc" ]
+
+    deps = [
+      ":assets",
+      "//flutter/third_party/boringssl",
+      "//flutter/third_party/zlib",
+    ]
+  }
+
+  source_set("packed_payload_section_fixture") {
+    testonly = true
+    sources = [ "packed_payload_section.S" ]
+    include_dirs = [ "testdata" ]
+    defines = [ "PAYLOAD_FILE=\"packed_payload_fixture.bin\"" ]
+  }
+
+  executable("packed_payload_section_test") {
+    testonly = true
+
+    sources = [ "packed_payload_section_test.cc" ]
+
+    deps = [
+      ":assets",
+      ":packed_payload_section_fixture",
+      "//flutter/third_party/googletest:gtest",
+      "//flutter/third_party/googletest:gtest_main",
+    ]
+  }
 }
