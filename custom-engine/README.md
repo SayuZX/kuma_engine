@@ -2,10 +2,12 @@
 
 Replaces Android `assets/flutter_assets/` with a native packed payload read by a
 custom Flutter Engine `AssetResolver`, keeping `Image.asset` / `rootBundle.load`
-working unchanged. Pinned to Flutter `flutter-3.47-candidate.0`, engine
-content_hash `ab598368...`, Dart `b530c21f...`. See `docs/` for the format and
-architecture. This is a hardening-of-static-extraction effort, not a security
-boundary.
+working unchanged. This branch is based on `kuma_engine`'s
+`flutter-3.27-candidate.0` branch (`82bd5b7`). The prototype was built and
+tested against a separate Flutter 3.47 engine checkout; the Android engine build
+and APK runtime have **not** been verified against this 3.27 port. See `docs/`
+for the format and architecture. This raises the cost of static extraction; it
+does not establish a security boundary.
 
 ## Layout
 
@@ -17,20 +19,26 @@ custom-engine/
 │   └── packer_test.dart
 ├── runtime/          canonical mirror of the engine-side resolver sources
 ├── engine_patch/     patch for tracked engine files + apply.sh
-├── linker/           linker scripts for Backend A/B (payload section)  [next]
+├── linker/           ELF section source and Backend A/B experiments
 ├── tests/            integration_roundtrip.sh (packer -> real resolver)
 ├── scripts/          build_host_test.sh, verify_release_apk.sh
-├── benchmarks/       [next]
+├── benchmarks/       compression measurements
 └── docs/             architecture.md, binary-format-v1.md
 ```
 
-The authoritative engine sources live in `engine/src/flutter/assets/`
+The authoritative engine sources live in `assets/`
 (`packed_asset_resolver.{h,cc}`, `_unittests.cc`, `_filecheck.cc`); `runtime/`
 holds identical copies so `engine_patch/apply.sh` can install them into a fresh
-engine checkout. `feap-tool/` at the repo root is the earlier standalone
-prototype, superseded by `asset_packer/`.
+checkout at the pinned 3.27 base. Run `build_host_test.sh` only from a synced
+engine workspace with this repo checked out as `flutter/`; set `ENGINE_SRC` to
+that workspace and `DART` to a Dart SDK executable.
 
 ## Status
+
+The checked results and size numbers below were measured on the separate
+Flutter 3.47 engine checkout. This 3.27 branch has passed the Dart packer tests
+and Git patch checks; a native 3.27 build, APK inspection, and device run remain
+unverified because this repository clone has no synced engine dependencies.
 
 - [x] Milestone 1: real engine `PackedAssetResolver` returns a packed asset;
       8 host unit tests pass; resolver + Android wiring cross-compile for arm64.
@@ -85,7 +93,7 @@ bash custom-engine/scripts/build_host_test.sh
 ## Pack a Flutter asset bundle
 
 ```bash
-DART=$HOME/development/flutter/bin/cache/dart-sdk/bin/dart
+DART=$(command -v dart)
 $DART custom-engine/asset_packer/flutter_asset_packer.dart \
   --input build/flutter_assets --output build/custom_assets \
   --hash fnv1a --compression none --alignment 16

@@ -1,5 +1,10 @@
 {
-  "description": "Pinned toolchain and source revisions for the custom packed-asset engine build. No 'latest' — reproduce with these exact revisions.",
+  "description": "Prototype verification config for the original Flutter 3.47 checkout. The kuma_engine 3.27 port is not yet native-build verified.",
+  "repository_port": {
+    "branch_base": "flutter-3.27-candidate.0",
+    "base_commit": "82bd5b7",
+    "native_build_status": "unverified: third-party dependencies and toolchain absent from this clone"
+  },
   "flutter": {
     "channel_branch": "flutter-3.47-candidate.0",
     "framework_version": "3.47.5",

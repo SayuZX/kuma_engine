@@ -5,7 +5,7 @@ Flutter apps whose assets live in a native packed payload instead of
 `assets/flutter_assets/`, while `Image.asset` / `rootBundle.load` keep working
 with no application-layer API change.
 
-Pinned revision: Flutter `flutter-3.47-candidate.0`, engine build content_hash
+Prototype verification used Flutter `flutter-3.47-candidate.0`, engine build content_hash
 `ab598368...`, Dart `b530c21f...`.
 
 ## Component map
