@@ -77,6 +77,8 @@ unlinked_spec.ds
 **/android/local.properties
 **/android/key.properties
 *.jks
+*.ed25519-private
+/assets/packed_asset_public_key_generated.h
 
 # iOS/Xcode related
 **/ios/**/*.mode1v3

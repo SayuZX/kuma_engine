@@ -13,6 +13,10 @@ import("//flutter/shell/gpu/gpu.gni")
 import("//flutter/shell/version/version.gni")
 import("//flutter/vulkan/config.gni")
 
+declare_args() {
+  flutter_custom_asset_hardened = false
+}
+
 shell_gpu_configuration("android_gpu_configuration") {
   enable_software = true
   enable_gl = true
@@ -173,6 +177,9 @@ source_set("flutter_shell_native_src") {
   public_configs = [ "//flutter:config" ]
 
   defines = []
+  if (flutter_custom_asset_hardened) {
+    defines += [ "FLUTTER_CUSTOM_ASSET_HARDENED=1" ]
+  }
 
   libs = [
     "android",
