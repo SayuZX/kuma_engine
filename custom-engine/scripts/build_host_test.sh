@@ -46,3 +46,7 @@ ENGINE_SRC="$ENGINE_SRC" python3 \
 echo "==> run Backend B linker checks"
 ENGINE_SRC="$ENGINE_SRC" python3 \
   "$ENGINE_ROOT/custom-engine/tests/backend_b_fixture.py"
+
+echo "==> run unsigned APK packaging tests"
+ENGINE_SRC="$ENGINE_SRC" DART="$DART" python3 \
+  "$ENGINE_ROOT/custom-engine/tests/package_apk_fixture.py"
