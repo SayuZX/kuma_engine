@@ -18,7 +18,7 @@ echo "==> gn gen (host, unoptimized)"
 
 echo "==> build resolver unit tests + file checker + section test"
 ninja -C "$HOST_OUT" packed_asset_resolver_smoketest \
-  packed_asset_resolver_filecheck packed_payload_section_test
+  packed_asset_resolver_filecheck packed_payload_section_test asset_signer
 
 echo "==> run unit tests"
 "./$HOST_OUT/packed_asset_resolver_smoketest"
@@ -34,3 +34,7 @@ echo "==> compression benchmark"
 
 echo "==> run packer -> engine resolver integration"
 bash "$ENGINE_ROOT/custom-engine/tests/integration_roundtrip.sh"
+
+echo "==> run synthetic APK release gate tests"
+ENGINE_SRC="$ENGINE_SRC" python3 \
+  "$ENGINE_ROOT/custom-engine/tests/release_gate_fixture.py"

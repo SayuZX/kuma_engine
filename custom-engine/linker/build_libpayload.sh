@@ -12,6 +12,7 @@ TOOLCHAIN="$ENGINE_SRC/flutter/buildtools/mac-x64/clang/bin"
 CLANG="$TOOLCHAIN/clang"
 READELF="$TOOLCHAIN/llvm-readelf"
 NM="$TOOLCHAIN/llvm-nm"
+STRIP="$TOOLCHAIN/llvm-strip"
 NDK="$ENGINE_SRC/flutter/third_party/android_tools/sdk/ndk/28.2.13676358"
 SYSROOT="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/sysroot"
 TARGET="aarch64-linux-android24"
@@ -35,6 +36,7 @@ echo "==> linking libpayload.so"
   -Wl,--version-script,"$HERE/libpayload.ver" \
   -Wl,--gc-sections \
   -o "$OUT" "$WORK/payload.o"
+"$STRIP" --strip-unneeded "$OUT"
 
 PAYLOAD_SIZE="$(stat -f '%z' "$PAYLOAD")"
 
