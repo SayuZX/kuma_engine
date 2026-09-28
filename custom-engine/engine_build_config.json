@@ -2,12 +2,14 @@
   "description": "Prototype verification config for the original Flutter 3.47 checkout. The kuma_engine 3.27 port is not yet native-build verified.",
   "repository_port": {
     "branch_base": "flutter-3.27-candidate.0",
-    "base_commit": "82bd5b7",
+    "base_commit": "82bd5b7209295a5b7ff8cae0df96e7870171e3a5",
     "native_build_status": "unverified: third-party dependencies and toolchain absent from this clone"
   },
   "flutter": {
     "channel_branch": "flutter-3.47-candidate.0",
     "framework_version": "3.47.5",
+    "framework_commit": "6a19cca56475dbfba1478ee68d7bd0c2ef891da1",
+    "sdk_engine_revision": "af7e796e161ae0bb1ff0758c71a7105418bd9ded",
     "engine_version": "6a19cca56475dbfba1478ee68d7bd0c2ef891da1",
     "engine_content_hash": "ab598368592da0064197e2bc15c7f5b0a2c6bb1f"
   },
@@ -40,7 +42,20 @@
     "note": "host toolchain builds x86_64 on this machine (runs under Rosetta); native arm64 runtime metrics require a device"
   },
   "apk_step": {
-    "status": "device-gated; not pinned here",
-    "note": "Gradle, Java/JDK and Android SDK build-tools versions are to be pinned when the on-device APK milestone lands"
+    "status": "Backend B APK candidate built and signed; plaintext gate fails; device execution unverified",
+    "gradle": "9.3.1",
+    "gradle_distribution": "https://services.gradle.org/distributions/gradle-9.3.1-bin.zip",
+    "gradle_sha256": "b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06",
+    "android_gradle_plugin": "9.1.0",
+    "kotlin_gradle_plugin": "2.4.0",
+    "java": "Eclipse Temurin 17.0.20.1+1 (x86_64)",
+    "android_build_tools": "37.0.0",
+    "compile_sdk": 36,
+    "target_sdk": 36,
+    "min_sdk": 24,
+    "android_ndk": "28.2.13676358",
+    "gradle_workers": 1,
+    "gradle_heap_mib": 2048,
+    "note": "SDK engine revision and local GN engine_version are recorded separately. The SDK NDK directory must expose the installed version to Flutter's provisioning check."
   }
 }
