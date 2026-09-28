@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise Backend B ELF layout and failure behavior; not a Dart runtime test."""
 
+import json
 import os
 from pathlib import Path
 import re
@@ -21,7 +22,8 @@ def main():
         work = Path(directory)
         assembly = work / 'fixture.S'
         assembly.write_text('\n'.join(
-            f'.section .rodata\n.globl _{name}\n_{name}:\n.quad 0' for name in names))
+            ('.text' if name.endswith(('Text', 'Instructions')) else '.section .rodata') +
+            f'\n.globl _{name}\n_{name}:\n.quad 0' for name in names))
         output = work / 'libapp.so'
         command = [sys.executable, str(ROOT / 'linker/build_backend_b.py'),
                    '--engine-src', str(ENGINE_SRC), '--assembly', str(assembly),
@@ -32,6 +34,8 @@ def main():
         subprocess.run(command, check=True, capture_output=True)
         if output.read_bytes() != first:
             raise RuntimeError('repeated link is not deterministic')
+        if not json.loads(output.with_suffix('.json').read_text())['payload_segment_executable']:
+            raise RuntimeError('API 24 linker layout changed; review Android unwinder compatibility')
         print('Backend B: deterministic ELF, payload bytes, PT_LOAD, exports, strip and 16 KiB alignment PASS')
         assembly.write_text('.text\n.globl unrelated\nunrelated:\nret\n')
         failed = subprocess.run(command, capture_output=True, text=True)

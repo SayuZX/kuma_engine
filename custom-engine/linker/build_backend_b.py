@@ -49,7 +49,7 @@ def validate(info, library, payload, expected):
     for segment in loads:
         require(segment['Alignment'] >= 16384, 'PT_LOAD alignment smaller than 16 KiB')
         require(segment['Flags']['Value'] & 3 != 3, 'writable executable segment')
-    require(any(p['Flags']['Value'] == 4 and
+    require(any(p['Flags']['Value'] & 6 == 4 and
                 p['Offset'] <= section['Offset'] and
                 section['Offset'] + section['Size'] <= p['Offset'] + p['FileSize'] and
                 section['Address'] - p['VirtualAddress'] == section['Offset'] - p['Offset']
@@ -106,17 +106,25 @@ def main():
         library = work / 'libapp.so'
         run(tools / 'clang', *target, '-shared', '-nostdlib',
             '-Wl,-soname,libapp.so', '-Wl,--no-undefined', '-Wl,--gc-sections',
-            '-Wl,--rosegment',
             '-Wl,-z,max-page-size=16384', '-Wl,-z,noexecstack', '-Wl,--build-id=sha1',
             f'-Wl,--version-script,{version_script}', f'-Wl,-T,{HERE / "payload_keep.ld"}',
             *[f'-Wl,--defsym,{name}={original}' for name, original in aliases.items()],
             app, payload, '-o', library)
         run(tools / 'llvm-strip', '--strip-unneeded', library)
-        validate(inspect(tools / 'llvm-readelf', library), library, args.payload, expected)
+        info = inspect(tools / 'llvm-readelf', library)
+        validate(info, library, args.payload, expected)
+        section = next(s['Section'] for s in info['Sections']
+                       if s['Section']['Name']['Name'] == '.flutter_payload')
+        payload_segment = next(p['ProgramHeader'] for p in info['ProgramHeaders']
+                               if p['ProgramHeader']['Type']['Name'] == 'PT_LOAD' and
+                               p['ProgramHeader']['Offset'] <= section['Offset'] <
+                               p['ProgramHeader']['Offset'] + p['ProgramHeader']['FileSize'])
         report = {'backend': 'B', 'library_bytes': library.stat().st_size,
                   'sha256': hashlib.sha256(library.read_bytes()).hexdigest(),
                   'payload_bytes': args.payload.stat().st_size, 'exports': expected,
-                  'snapshot_aliases': aliases, 'device_tested': False}
+                  'snapshot_aliases': aliases,
+                  'payload_segment_executable': bool(payload_segment['Flags']['Value'] & 1),
+                  'device_tested': False}
         library.replace(args.output)
         args.output.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report, indent=2))

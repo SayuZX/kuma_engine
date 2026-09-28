@@ -59,7 +59,7 @@ Every alias is reported in the adjacent JSON build report. Unknown layouts or
 missing symbols fail before replacing an existing output.
 
 The measured demo contains 782,533 bytes of signed payload; the stripped
-`libapp.so` is 3,974,424 bytes and exports four symbols: two snapshot symbols
+`libapp.so` is 3,974,360 bytes and exports four symbols: two snapshot symbols
 and the two payload bounds. This is **static ELF validation**, not a successful
 Android launch. The 3.27 repository port and the device runtime remain untested.
 
@@ -79,9 +79,16 @@ match the pinned macOS host in `engine_build_config.json`.
 
 `payload_keep.ld` retains the section with `KEEP()` during garbage collection.
 The export version script hides every symbol except the names the engine needs.
-The Android Clang driver adds `--no-rosegment`; the link explicitly overrides it
-with `--rosegment` so payload bytes are not executable. Validation checks actual
-file offsets and virtual addresses against a read-only `PT_LOAD`, byte equality,
+The Android Clang driver adds `--no-rosegment` for the API 24 target to preserve
+old Android crash-unwinder compatibility. An initial experiment forced
+`--rosegment`; review against the [NDK build guide](https://android.googlesource.com/platform/ndk/+/master/docs/BuildSystemMaintainers.md)
+showed why that override was unsafe for compatibility, and it was removed.
+The payload section is read-only, but shares an executable segment on this target;
+the JSON report exposes this as `payload_segment_executable`. Backend A's separate
+data-only library avoids that tradeoff. Requiring a non-executable segment for
+Backend B needs a separately validated layout or a newer minimum Android version.
+Validation checks actual file offsets and virtual addresses against a non-writable
+`PT_LOAD`, byte equality,
 16 KiB segment alignment, symbol bounds, no undefined/extra exports, and stripping.
 
 `tests/backend_b_fixture.py` exercises repeatable linking and rejection of missing
