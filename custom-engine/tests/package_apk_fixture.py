@@ -71,6 +71,7 @@ def main():
             checked(['bash', str(ROOT / 'scripts/verify_release_apk.sh'), str(output),
                      '--public', str(public)], env=env)
             print(f'Backend {backend}: deterministic packaging and structural/integrity gate PASS (unsigned fixture)')
+        valid_apk = original.read_bytes()
         with zipfile.ZipFile(original, 'a') as apk:
             apk.writestr('assets/flutter_assets/../../escape.txt', b'bad path')
         rejected = subprocess.run(command, capture_output=True, text=True)
@@ -79,6 +80,18 @@ def main():
         if output.read_bytes() != first:
             raise RuntimeError('invalid APK replaced previous output')
         print('Unsafe input ZIP rejected; previous output preserved PASS')
+        probe = work / 'CaseProbe'
+        probe.write_text('case sensitivity probe')
+        if (work / 'caseprobe').exists():
+            original.write_bytes(valid_apk)
+            with zipfile.ZipFile(original, 'a') as apk:
+                apk.writestr('assets/flutter_assets/ASSETS/HELLO.TXT', b'alias')
+            rejected = subprocess.run(command, capture_output=True, text=True)
+            if rejected.returncode == 0 or 'FileExistsError' not in rejected.stderr:
+                raise RuntimeError('host filesystem alias silently overwrote an asset')
+            if output.read_bytes() != first:
+                raise RuntimeError('aliased APK replaced previous output')
+            print('Case alias on case-insensitive host rejected PASS')
 
 
 if __name__ == '__main__':

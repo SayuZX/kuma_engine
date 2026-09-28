@@ -74,7 +74,10 @@ def main():
             for entry in asset_infos:
                 target = assets / entry.filename[len(PREFIX):]
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(original.read(entry))
+                # Exclusive creation also rejects case/Unicode aliases on a
+                # case-insensitive host filesystem rather than losing an asset.
+                with target.open('xb') as destination:
+                    destination.write(original.read(entry))
             packed = work / 'packed'
             run(args.dart, ROOT / 'asset_packer/flutter_asset_packer.dart',
                 '--input', assets, '--output', packed, '--compression', 'auto',
