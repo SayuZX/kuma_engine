@@ -13,6 +13,8 @@ if ! grep -Eq '^flutter_custom_asset_hardened = true$' "$ENGINE_SRC/out/$ENGINE_
   echo 'Configure the Android release engine with flutter_custom_asset_hardened=true first.' >&2
   exit 2
 fi
+cd "$ENGINE_SRC"
+"$NINJA" -C "out/$HOST_OUT" -j1 asset_signer gen/const_finder.dart.snapshot font-subset
 HEADER="$ENGINE_SRC/flutter/assets/packed_asset_public_key_generated.h"
 GENERATED="$(mktemp "${HEADER}.XXXXXX")"
 trap 'rm -f "$GENERATED"' EXIT
@@ -25,5 +27,4 @@ fi
 
 # flutter.jar also refreshes arm64_v8a_release.jar used by the local Maven repo.
 # Building only libflutter.so leaves the APK dependency pointing at old code.
-cd "$ENGINE_SRC"
 "$NINJA" -C "out/$ENGINE_OUT" -j1 flutter.jar
