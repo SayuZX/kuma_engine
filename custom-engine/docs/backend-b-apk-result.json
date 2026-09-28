@@ -1,0 +1,50 @@
+{
+  "backend": "B",
+  "apk_bytes": 16982773,
+  "apk_sha256": "dca3f97acba55eb5df04c092bf603054bd791546d08b69fe992ab3a0a54bb7aa",
+  "android_signature_schemes_verified": [
+    "v2",
+    "v3"
+  ],
+  "signing_identity": "prototype test key",
+  "zipalign_16k_passed": true,
+  "native_libraries": {
+    "libflutter.so": {
+      "bytes": 13259584,
+      "sha256": "783e3f683ab0705d396ab36af83035f334351e59b5cb61b627483bceb27ce035",
+      "zip_data_offset": 245760,
+      "defined_dynamic_symbols": 70
+    },
+    "libapp.so": {
+      "bytes": 3417688,
+      "sha256": "93ceb83e90792f4e370d174608c3a7463f24a3fabc50c2f2da0a344fc90454e7",
+      "zip_data_offset": 13549568,
+      "defined_dynamic_symbols": 4,
+      "exports": [
+        "__flutter_payload_start",
+        "__flutter_payload_end",
+        "kDartSnapshotData",
+        "kDartSnapshotText"
+      ]
+    }
+  },
+  "device_tested": false,
+  "release_gate_passed": false,
+  "release_gate_failure": "plaintext asset path literals in libapp.so",
+  "native_unit_tests_passed": 35,
+  "repository_port_3_27_native_build_verified": false,
+  "flutter_assets_present": false,
+  "compiled_public_key_bytes_found": true,
+  "payload": {
+    "bytes": 225877,
+    "version": 3,
+    "asset_count": 11,
+    "signature_and_all_block_digests_valid": true,
+    "executable_segment_for_api24_compatibility": true
+  },
+  "plaintext_asset_literals": [
+    "assets/data.json",
+    "assets/logo.png",
+    "assets/message.txt"
+  ]
+}

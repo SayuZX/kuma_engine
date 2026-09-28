@@ -52,6 +52,17 @@ unverified because this repository clone has no synced engine dependencies.
       +2104 bytes stripped, zero new exported symbols (ABI unchanged).
 - [x] Backend B experiment: link-time embed into `libapp.so` works (payload in a
       PT_LOAD segment); objcopy post-link does not (documented constraint).
+- [x] Backend B real AOT relink: a Flutter demo's generated assembly plus signed
+      payload links into a 3,974,360 B library; snapshot exports, read-only
+      payload segment, 16 KiB alignment and deterministic fixture linking pass.
+      Android execution remains unverified.
+- [x] APK repack stage: synthetic Backend A/B APKs pass structural/integrity
+      tests with the standard asset bundle removed. Build/signing wrappers and
+      strict remaining gates are documented in `docs/android-packaging.md`.
+- [x] Actual Backend B APK candidate: 16,982,773 B, exactly two ARM64 native
+      libraries, no `flutter_assets`, Android v2/v3 signatures and payload
+      integrity verified. **The strict plaintext gate fails on Dart asset path
+      literals.** This is a test-signed candidate, not a validated release.
 - [x] Compression (zlib): packer `--compression auto|none|zlib` with a
       benchmark-derived threshold; resolver inflates (codec id in `flags`,
       format v2, accepts v1); verified end-to-end (12000 B JSON → 66 B stored,
@@ -84,10 +95,11 @@ unverified because this repository clone has no synced engine dependencies.
       SIMD — keep C++. `asset_hash_arm64` ABI + differential/known-vector tests
       in place for a future asm variant (docs/arm64-optimization.md).
 - [x] Reproducible build: pinned revisions in `engine_build_config.json`.
-- [ ] Runtime end-to-end (device-gated): package APK with `libpayload.so`,
-      confirm `Image.asset` / `rootBundle.load` on a device and `flutter_assets/`
-      removed, then run `scripts/verify_release_apk.sh --public <key>`. Needs a device/emulator
-      and a demo app; everything up to this point is verified host-side.
+- [ ] Runtime end-to-end (device-gated): install the Backend B demo candidate,
+      confirm `Image.asset` / `rootBundle.load` and fonts on Android, then measure
+      startup, latency and memory. ADB currently reports no connected device.
+- [ ] Hardened release: resolve the strict plaintext gate and verify the native
+      3.27 port before calling this branch production ready.
 
 ## Run the host tests (no device, no Metal toolchain)
 
