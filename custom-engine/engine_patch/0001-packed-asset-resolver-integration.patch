@@ -149,7 +149,7 @@ index 6f062431cf74743e5a78a65dc735985f2139698b..b878b466337d4b4471e378c29f3894fd
    libs = [
      "android",
 diff --git a/shell/platform/android/android_shell_holder.cc b/shell/platform/android/android_shell_holder.cc
-index e86effe09bd92ee15e199f1457cfab138be3ca09..6bacea18a410cac48d94e1f393e8b5015f943537 100644
+index e86effe09bd92ee15e199f1457cfab138be3ca09..06c340d47cbee03b1634cda9c0ca85f382a7529a 100644
 --- a/shell/platform/android/android_shell_holder.cc
 +++ b/shell/platform/android/android_shell_holder.cc
 @@ -16,6 +16,13 @@
@@ -166,20 +166,24 @@ index e86effe09bd92ee15e199f1457cfab138be3ca09..6bacea18a410cac48d94e1f393e8b501
  #include "flutter/fml/cpu_affinity.h"
  #include "flutter/fml/logging.h"
  #include "flutter/fml/make_copyable.h"
-@@ -33,6 +40,39 @@
+@@ -33,6 +40,43 @@
  
  namespace flutter {
  
 +namespace {
 +
-+extern "C" {
-+__attribute__((weak)) extern const uint8_t __flutter_payload_start[];
-+__attribute__((weak)) extern const uint8_t __flutter_payload_end[];
-+}
-+
 +std::unique_ptr<PackedAssetResolver> CreateEmbeddedPackedResolver() {
-+  const uint8_t* start = __flutter_payload_start;
-+  const uint8_t* end = __flutter_payload_end;
++  // Keep the loaded library mapped for every mapping returned by the resolver.
++  static const auto payload_library = [] {
++    auto backend_a = fml::NativeLibrary::Create("libpayload.so");
++    return backend_a ? backend_a : fml::NativeLibrary::Create("libapp.so");
++  }();
++  if (!payload_library) {
++    return nullptr;
++  }
++  const uint8_t* start =
++      payload_library->ResolveSymbol("__flutter_payload_start");
++  const uint8_t* end = payload_library->ResolveSymbol("__flutter_payload_end");
 +  if (start == nullptr || end == nullptr || end <= start) {
 +    return nullptr;
 +  }
@@ -206,7 +210,7 @@ index e86effe09bd92ee15e199f1457cfab138be3ca09..6bacea18a410cac48d94e1f393e8b501
  /// Inheriting ThreadConfigurer and use Android platform thread API to configure
  /// the thread priorities
  static void AndroidPlatformThreadConfigSetter(
-@@ -337,7 +377,17 @@ std::optional<RunConfiguration> AndroidShellHolder::BuildRunConfiguration(
+@@ -337,7 +381,17 @@ std::optional<RunConfiguration> AndroidShellHolder::BuildRunConfiguration(
    }
  
    RunConfiguration config(std::move(isolate_configuration));
