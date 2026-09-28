@@ -49,9 +49,45 @@ which is what the engine wiring needs.
   need a section injected before/without a relink, which is not currently
   supported. Prefer the assembly path or Backend A.
 
-## Recommendation
+## Real AOT relink milestone (Flutter 3.47 verification checkout)
 
-Prefer **Backend A** (`libpayload.so`): it needs no change to how `libapp.so` is
-produced, is fully working and statically verified, and keeps the payload in its
-own inspectable object. Backend B remains a valid option once the Flutter tool's
-app link is hooked via the assembly path.
+`build_backend_b.py` now links assembly generated from an actual Flutter demo
+kernel. It reads the snapshot symbol names from the chosen engine's
+`runtime/dart_snapshot.cc`, verifies that the object defines them, and permits
+an explicit linker alias when the assembly uses an extra leading underscore.
+Every alias is reported in the adjacent JSON build report. Unknown layouts or
+missing symbols fail before replacing an existing output.
+
+The measured demo contains 782,533 bytes of signed payload; the stripped
+`libapp.so` is 3,974,424 bytes and exports four symbols: two snapshot symbols
+and the two payload bounds. This is **static ELF validation**, not a successful
+Android launch. The 3.27 repository port and the device runtime remain untested.
+
+```bash
+ENGINE_SRC=/path/to/engine/src
+"$ENGINE_SRC/out/android_release_arm64/clang_x64/gen_snapshot" \
+  --deterministic --snapshot_kind=app-aot-assembly \
+  --assembly=/path/to/app.S --strip /path/to/matching/app.dill
+python3 custom-engine/linker/build_backend_b.py \
+  --engine-src "$ENGINE_SRC" --assembly /path/to/app.S \
+  --payload /path/to/payload.signed.bin --output /path/to/libapp.so
+```
+
+Use the kernel and snapshot options from the same release build being packaged.
+Deferred loading is not integrated. The toolchain paths and NDK version currently
+match the pinned macOS host in `engine_build_config.json`.
+
+`payload_keep.ld` retains the section with `KEEP()` during garbage collection.
+The export version script hides every symbol except the names the engine needs.
+The Android Clang driver adds `--no-rosegment`; the link explicitly overrides it
+with `--rosegment` so payload bytes are not executable. Validation checks actual
+file offsets and virtual addresses against a read-only `PT_LOAD`, byte equality,
+16 KiB segment alignment, symbol bounds, no undefined/extra exports, and stripping.
+
+`tests/backend_b_fixture.py` exercises repeatable linking and rejection of missing
+snapshot symbols while preserving an earlier valid output. Payload authenticity
+is checked separately by `asset_signer verify` and the APK release gate.
+
+Backend A remains the simpler packaging path. Backend B now has a real AOT
+linker, but packaging and an Android runtime test are still required before it
+can be called a working app.

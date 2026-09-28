@@ -42,3 +42,7 @@ ENGINE_SRC="$ENGINE_SRC" python3 \
 echo "==> run shared-library payload symbol test"
 ENGINE_SRC="$ENGINE_SRC" python3 \
   "$ENGINE_ROOT/custom-engine/tests/native_library_fixture.py"
+
+echo "==> run Backend B linker checks"
+ENGINE_SRC="$ENGINE_SRC" python3 \
+  "$ENGINE_ROOT/custom-engine/tests/backend_b_fixture.py"
