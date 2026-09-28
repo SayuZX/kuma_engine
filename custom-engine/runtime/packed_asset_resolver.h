@@ -14,6 +14,7 @@
 #include "flutter/assets/asset_resolver.h"
 #include "flutter/assets/packed_asset_cache.h"
 #include "flutter/assets/packed_asset_crypto.h"
+#include "flutter/assets/packed_asset_signature.h"
 #include "flutter/fml/macros.h"
 #include "flutter/fml/mapping.h"
 
@@ -22,6 +23,7 @@ namespace flutter {
 class PackedAssetResolver final : public AssetResolver {
  public:
   static constexpr uint16_t kFormatVersion = 2;
+  static constexpr uint16_t kSignedFormatVersion = 3;
   static constexpr size_t kHeaderSize = 32;
   static constexpr size_t kEntrySize = 32;
   static constexpr uint32_t kCodecMask = 0xff;
@@ -29,12 +31,14 @@ class PackedAssetResolver final : public AssetResolver {
   static constexpr uint32_t kCodecZlib = 1;
   static constexpr uint16_t kHeaderFlagEntryCrc32 = 1u << 0;
   static constexpr uint16_t kHeaderFlagEncrypted = 1u << 1;
+  static constexpr uint16_t kHeaderFlagSignedIndex = 1u << 2;
   static constexpr uint64_t kMaxDecompressedSize = 256ull * 1024 * 1024;
 
   PackedAssetResolver(const uint8_t* payload,
                       size_t size,
                       std::shared_ptr<PackedAssetCache> cache = nullptr,
-                      const uint8_t* decryption_key = nullptr);
+                      const uint8_t* decryption_key = nullptr,
+                      const uint8_t* verification_key = nullptr);
 
   ~PackedAssetResolver() override;
 
@@ -67,7 +71,7 @@ class PackedAssetResolver final : public AssetResolver {
 
   bool ReadEntry(uint32_t index, Entry* out) const;
 
-  bool Lookup(uint64_t key_hash, Entry* out) const;
+  bool Lookup(uint64_t key_hash, Entry* out, uint32_t* index) const;
 
   bool BlockBounds(const Entry& entry, uint64_t* start) const;
 
@@ -75,13 +79,17 @@ class PackedAssetResolver final : public AssetResolver {
   const size_t size_;
   std::shared_ptr<PackedAssetCache> cache_;
   std::array<uint8_t, PackedAssetCrypto::kKeySize> key_{};
+  std::array<uint8_t, PackedAssetSignature::kPublicKeySize> signature_key_{};
   bool has_key_ = false;
+  bool has_signature_key_ = false;
   bool valid_ = false;
   bool verify_crc_ = false;
   bool encrypted_ = false;
+  bool signed_ = false;
   uint32_t count_ = 0;
   uint64_t index_offset_ = 0;
   uint64_t blob_offset_ = 0;
+  uint64_t digest_offset_ = 0;
 
   FML_DISALLOW_COPY_AND_ASSIGN(PackedAssetResolver);
 };

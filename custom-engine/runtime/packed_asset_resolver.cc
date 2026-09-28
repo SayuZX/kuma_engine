@@ -76,11 +76,17 @@ PackedAssetResolver::PackedAssetResolver(
     const uint8_t* payload,
     size_t size,
     std::shared_ptr<PackedAssetCache> cache,
-    const uint8_t* decryption_key)
+    const uint8_t* decryption_key,
+    const uint8_t* verification_key)
     : payload_(payload), size_(size), cache_(std::move(cache)) {
   if (decryption_key != nullptr) {
     std::memcpy(key_.data(), decryption_key, key_.size());
     has_key_ = true;
+  }
+  if (verification_key != nullptr) {
+    std::memcpy(signature_key_.data(), verification_key,
+                signature_key_.size());
+    has_signature_key_ = true;
   }
   if (payload_ == nullptr || size_ < kHeaderSize) {
     return;
@@ -90,7 +96,7 @@ PackedAssetResolver::PackedAssetResolver(
     return;
   }
   const uint16_t version = ReadU16LE(payload_ + 4);
-  if (version < 1 || version > kFormatVersion) {
+  if (version < 1 || version > kSignedFormatVersion) {
     FML_DLOG(WARNING) << "PackedAssetResolver: unsupported version";
     return;
   }
@@ -116,8 +122,36 @@ PackedAssetResolver::PackedAssetResolver(
   }
 
   const uint16_t header_flags = ReadU16LE(payload_ + 6);
+  if ((header_flags & ~(kHeaderFlagEntryCrc32 | kHeaderFlagEncrypted |
+                        kHeaderFlagSignedIndex)) != 0) {
+    return;
+  }
   verify_crc_ = (header_flags & kHeaderFlagEntryCrc32) != 0;
   encrypted_ = (header_flags & kHeaderFlagEncrypted) != 0;
+  signed_ = (header_flags & kHeaderFlagSignedIndex) != 0;
+  if (signed_ != (version == kSignedFormatVersion) ||
+      signed_ != has_signature_key_) {
+    return;
+  }
+  if (signed_) {
+    digest_offset_ = ReadU64LE(payload_ + 24);
+    const uint64_t digest_bytes =
+        static_cast<uint64_t>(count_) * PackedAssetSignature::kDigestSize;
+    if (digest_offset_ != index_end ||
+        !RegionInBounds(digest_offset_, digest_bytes, size_)) {
+      return;
+    }
+    const uint64_t signature_offset = digest_offset_ + digest_bytes;
+    if (!RegionInBounds(signature_offset,
+                        PackedAssetSignature::kSignatureSize, size_) ||
+        blob_offset_ < signature_offset + PackedAssetSignature::kSignatureSize ||
+        !PackedAssetSignature::VerifyIndex(
+            payload_, signature_offset, payload_ + signature_offset,
+            signature_key_.data())) {
+      FML_DLOG(WARNING) << "PackedAssetResolver: index signature invalid";
+      return;
+    }
+  }
   valid_ = true;
 }
 
@@ -164,7 +198,9 @@ bool PackedAssetResolver::BlockBounds(const Entry& entry,
   return true;
 }
 
-bool PackedAssetResolver::Lookup(uint64_t key_hash, Entry* out) const {
+bool PackedAssetResolver::Lookup(uint64_t key_hash,
+                                 Entry* out,
+                                 uint32_t* index) const {
   uint32_t lo = 0;
   uint32_t hi = count_;
   while (lo < hi) {
@@ -175,6 +211,7 @@ bool PackedAssetResolver::Lookup(uint64_t key_hash, Entry* out) const {
     }
     if (probe.key_hash == key_hash) {
       *out = probe;
+      *index = mid;
       return true;
     }
     if (probe.key_hash < key_hash) {
@@ -193,12 +230,22 @@ std::unique_ptr<fml::Mapping> PackedAssetResolver::GetAsMapping(
   }
 
   Entry entry;
-  if (!Lookup(HashAssetKey(asset_name), &entry)) {
+  uint32_t index = 0;
+  if (!Lookup(HashAssetKey(asset_name), &entry, &index)) {
     return nullptr;
   }
 
   uint64_t start = 0;
   if (!BlockBounds(entry, &start)) {
+    return nullptr;
+  }
+
+  if (signed_ &&
+      !PackedAssetSignature::BlockMatches(
+          payload_ + start, entry.stored_size,
+          payload_ + digest_offset_ +
+              static_cast<uint64_t>(index) * PackedAssetSignature::kDigestSize)) {
+    FML_DLOG(WARNING) << "PackedAssetResolver: asset digest mismatch";
     return nullptr;
   }
 
@@ -277,6 +324,13 @@ bool PackedAssetResolver::VerifyIntegrity() const {
     }
     uint64_t start = 0;
     if (!BlockBounds(entry, &start)) {
+      return false;
+    }
+    if (signed_ &&
+        !PackedAssetSignature::BlockMatches(
+            payload_ + start, entry.stored_size,
+            payload_ + digest_offset_ +
+                static_cast<uint64_t>(i) * PackedAssetSignature::kDigestSize)) {
       return false;
     }
     if (verify_crc_) {

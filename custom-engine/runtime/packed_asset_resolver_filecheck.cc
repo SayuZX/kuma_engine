@@ -56,18 +56,33 @@ int main(int argc, char** argv) {
   int arg = 1;
   uint8_t key[32];
   const uint8_t* key_ptr = nullptr;
-  if (argc >= 3 && std::strcmp(argv[1], "--key") == 0) {
-    if (!HexToKey(argv[2], key)) {
-      std::fprintf(stderr, "FAIL invalid --key\n");
-      return 2;
+  std::unique_ptr<fml::Mapping> public_key;
+  while (arg + 1 < argc) {
+    if (std::strcmp(argv[arg], "--key") == 0) {
+      if (!HexToKey(argv[arg + 1], key)) {
+        std::fprintf(stderr, "FAIL invalid --key\n");
+        return 2;
+      }
+      key_ptr = key;
+      arg += 2;
+    } else if (std::strcmp(argv[arg], "--public") == 0) {
+      public_key = fml::FileMapping::CreateReadOnly(argv[arg + 1]);
+      if (!public_key ||
+          public_key->GetSize() !=
+              flutter::PackedAssetSignature::kPublicKeySize) {
+        std::fprintf(stderr, "FAIL invalid --public file\n");
+        return 2;
+      }
+      arg += 2;
+    } else {
+      break;
     }
-    key_ptr = key;
-    arg = 3;
   }
 
   if (argc - arg < 3 || ((argc - arg) % 2) != 1) {
     std::fprintf(stderr,
-                 "usage: %s [--key <64hex>] <payload.bin> <key> <expected> "
+                 "usage: %s [--key <64hex>] [--public <file>] "
+                 "<payload.bin> <key> <expected> "
                  "[<key> <expected> ...]\n",
                  argv[0]);
     return 2;
@@ -80,7 +95,9 @@ int main(int argc, char** argv) {
   }
 
   flutter::PackedAssetResolver resolver(payload->GetMapping(),
-                                        payload->GetSize(), nullptr, key_ptr);
+                                        payload->GetSize(), nullptr, key_ptr,
+                                        public_key ? public_key->GetMapping()
+                                                   : nullptr);
   if (!resolver.IsValid()) {
     std::fprintf(stderr, "FAIL payload is not a valid FEAP payload\n");
     return 1;

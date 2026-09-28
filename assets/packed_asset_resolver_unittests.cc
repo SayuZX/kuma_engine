@@ -4,6 +4,8 @@
 
 #include "flutter/assets/packed_asset_resolver.h"
 
+#include <openssl/curve25519.h>
+
 #include <algorithm>
 #include <cstring>
 #include <map>
@@ -178,6 +180,56 @@ std::vector<uint8_t> BuildCodecPayload(std::vector<CodecEntry> entries,
     AppendU32LE(&out, checksum);
   }
   out.insert(out.end(), blob.begin(), blob.end());
+  return out;
+}
+
+std::vector<uint8_t> BuildSignedPayload(
+    const std::vector<uint8_t>& input,
+    const uint8_t private_key[PackedAssetSignature::kPrivateKeySize]) {
+  const uint32_t count = static_cast<uint32_t>(input[8]) |
+                         (static_cast<uint32_t>(input[9]) << 8) |
+                         (static_cast<uint32_t>(input[10]) << 16) |
+                         (static_cast<uint32_t>(input[11]) << 24);
+  const size_t index_end = PackedAssetResolver::kHeaderSize +
+                           static_cast<size_t>(count) *
+                               PackedAssetResolver::kEntrySize;
+  const size_t signature_offset =
+      index_end + count * PackedAssetSignature::kDigestSize;
+  const size_t new_blob =
+      (signature_offset + PackedAssetSignature::kSignatureSize + 15) & ~15u;
+  const size_t old_blob = index_end;
+  std::vector<uint8_t> out(new_blob + input.size() - old_blob, 0);
+  std::memcpy(out.data(), input.data(), index_end);
+  out[4] = PackedAssetResolver::kSignedFormatVersion;
+  out[5] = 0;
+  out[6] = PackedAssetResolver::kHeaderFlagSignedIndex;
+  out[7] = 0;
+  for (size_t i = 0; i < 8; ++i) {
+    out[16 + i] = static_cast<uint8_t>(new_blob >> (8 * i));
+    out[24 + i] = static_cast<uint8_t>(index_end >> (8 * i));
+  }
+  for (uint32_t i = 0; i < count; ++i) {
+    const size_t row = PackedAssetResolver::kHeaderSize +
+                       static_cast<size_t>(i) * PackedAssetResolver::kEntrySize;
+    size_t offset = 0;
+    for (size_t byte = 0; byte < 8; ++byte) {
+      offset |= static_cast<size_t>(out[row + 8 + byte]) << (8 * byte);
+    }
+    const size_t stored = static_cast<size_t>(out[row + 16]) |
+                          (static_cast<size_t>(out[row + 17]) << 8) |
+                          (static_cast<size_t>(out[row + 18]) << 16) |
+                          (static_cast<size_t>(out[row + 19]) << 24);
+    PackedAssetSignature::DigestBlock(
+        input.data() + old_blob + offset, stored,
+        out.data() + index_end +
+            static_cast<size_t>(i) * PackedAssetSignature::kDigestSize);
+    std::memset(out.data() + row + 28, 0, 4);
+  }
+  EXPECT_TRUE(PackedAssetSignature::SignIndex(
+      out.data(), signature_offset, private_key,
+      out.data() + signature_offset));
+  std::memcpy(out.data() + new_blob, input.data() + old_blob,
+              input.size() - old_blob);
   return out;
 }
 
@@ -520,6 +572,58 @@ TEST(PackedAssetResolverTest, EncryptedThenCompressedRoundTrips) {
   EXPECT_EQ(MappingToString(*resolver.GetAsMapping(key_name)), value);
   EXPECT_EQ(MappingToString(*resolver.GetAsMapping(key_name)), value);
   EXPECT_EQ(cache->GetStats().hits, 1u);
+}
+
+TEST(PackedAssetResolverTest, SignedIndexLoadsAssetsOffline) {
+  uint8_t public_key[32];
+  uint8_t private_key[64];
+  ED25519_keypair(public_key, private_key);
+  auto unsigned_payload = BuildPayload({{"assets/a.txt", "alpha"},
+                                        {"assets/b.txt", "bravo"}});
+  auto signed_payload = BuildSignedPayload(unsigned_payload, private_key);
+  PackedAssetResolver resolver(signed_payload.data(), signed_payload.size(),
+                               nullptr, nullptr, public_key);
+  ASSERT_TRUE(resolver.IsValid());
+  ASSERT_NE(resolver.GetAsMapping("assets/a.txt"), nullptr);
+  EXPECT_EQ(MappingToString(*resolver.GetAsMapping("assets/a.txt")), "alpha");
+  EXPECT_TRUE(resolver.VerifyIntegrity());
+  PackedAssetResolver no_key(signed_payload.data(), signed_payload.size());
+  EXPECT_FALSE(no_key.IsValid());
+  PackedAssetResolver unsigned_with_key(unsigned_payload.data(),
+                                        unsigned_payload.size(), nullptr,
+                                        nullptr, public_key);
+  EXPECT_FALSE(unsigned_with_key.IsValid());
+}
+
+TEST(PackedAssetResolverTest, SignedIndexRejectsMetadataTampering) {
+  uint8_t public_key[32];
+  uint8_t private_key[64];
+  ED25519_keypair(public_key, private_key);
+  auto input = BuildPayload({{"assets/a.txt", "alpha"}});
+  auto signed_payload = BuildSignedPayload(input, private_key);
+  signed_payload[PackedAssetResolver::kHeaderSize + 24] ^= 1;
+  PackedAssetResolver resolver(signed_payload.data(), signed_payload.size(),
+                               nullptr, nullptr, public_key);
+  EXPECT_FALSE(resolver.IsValid());
+  signed_payload[PackedAssetResolver::kHeaderSize + 24] ^= 1;
+  public_key[0] ^= 1;
+  PackedAssetResolver wrong_key(signed_payload.data(), signed_payload.size(),
+                                 nullptr, nullptr, public_key);
+  EXPECT_FALSE(wrong_key.IsValid());
+}
+
+TEST(PackedAssetResolverTest, SignedIndexRejectsBlockTamperingLazily) {
+  uint8_t public_key[32];
+  uint8_t private_key[64];
+  ED25519_keypair(public_key, private_key);
+  auto input = BuildPayload({{"assets/a.txt", "alpha"}});
+  auto signed_payload = BuildSignedPayload(input, private_key);
+  signed_payload.back() ^= 1;
+  PackedAssetResolver resolver(signed_payload.data(), signed_payload.size(),
+                               nullptr, nullptr, public_key);
+  ASSERT_TRUE(resolver.IsValid());
+  EXPECT_EQ(resolver.GetAsMapping("assets/a.txt"), nullptr);
+  EXPECT_FALSE(resolver.VerifyIntegrity());
 }
 
 TEST(PackedAssetResolverTest, FuzzMalformedPayloadNeverCrashes) {

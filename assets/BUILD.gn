@@ -19,6 +19,8 @@ source_set("assets") {
     "packed_asset_crypto.h",
     "packed_asset_resolver.cc",
     "packed_asset_resolver.h",
+    "packed_asset_signature.cc",
+    "packed_asset_signature.h",
   ]
 
   deps = [
@@ -43,6 +45,7 @@ if (enable_unittests) {
 
     deps = [
       ":assets",
+      "//flutter/third_party/boringssl",
       "//flutter/third_party/googletest:gtest",
       "//flutter/third_party/googletest:gtest_main",
     ]
@@ -68,6 +71,17 @@ if (enable_unittests) {
       ":assets",
       "//flutter/third_party/boringssl",
       "//flutter/third_party/zlib",
+    ]
+  }
+
+  executable("asset_signer") {
+    testonly = true
+
+    sources = [ "asset_signer.cc" ]
+
+    deps = [
+      ":assets",
+      "//flutter/third_party/boringssl",
     ]
   }
 
