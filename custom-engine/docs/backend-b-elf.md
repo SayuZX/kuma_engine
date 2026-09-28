@@ -1,9 +1,10 @@
 # Backend B — embedding the payload inside libapp.so
 
 Backend B avoids shipping a separate `libpayload.so` by placing the packed
-payload inside the Dart AOT library `libapp.so`. It reuses the exact same engine
-wiring as Backend A (`__flutter_payload_start` / `__flutter_payload_end` weak
-symbols); only the packaging differs.
+payload inside the Dart AOT library `libapp.so`. The Android holder first opens
+`libpayload.so` for Backend A, then tries `libapp.so`; it resolves
+`__flutter_payload_start` / `__flutter_payload_end` from the selected handle.
+Only the packaging and link step differ.
 
 ## Experimental result
 

@@ -29,8 +29,10 @@ not under `shell/platform/android/`. Only payload discovery and registration are
 Android-specific and live in `android_shell_holder.cc::BuildRunConfiguration`,
 where the packed resolver is pushed **before** the APK resolver, giving order
 `[packed, apk]`: packed is tried first, APK is the fallback. `AddAssetResolver`
-is `PushBack` and rejects `!IsValid()`, so if no payload is linked the resolver
-is invalid and simply not added — behavior is then identical to upstream.
+is `PushBack` and rejects `!IsValid()`. The holder explicitly loads
+`libpayload.so` through `fml::NativeLibrary` and retains the handle for the
+process lifetime. Hardened mode requires a valid signed resolver and omits the
+APK fallback.
 
 ## Runtime pipeline
 

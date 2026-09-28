@@ -9,7 +9,7 @@ output shipped in `lib.stripped/`).
 
 | Lever | Before | After | Saving | Risk |
 |---|---:|---:|---:|---|
-| Symbol strip (current hardened build, unstripped → shipped `lib.stripped/libflutter.so`) | 327,189,552 | 13,259,456 | 313,930,096 (95.9%) | none — release ships the stripped lib |
+| Symbol strip (current hardened build, unstripped → shipped `lib.stripped/libflutter.so`) | 327,192,888 | 13,259,584 | 313,933,304 (95.9%) | none — release ships the stripped lib |
 | Exported-symbol minimization (`android_exports.lst` version script) | — | 70 defined dynamic symbols | no asset-specific exports | keeps JNI/embedding exports intact |
 | Section GC + hidden visibility (`--gc-sections`, `-fvisibility=hidden`) | — | — | dead sections dropped | none — already in release config |
 
@@ -26,10 +26,12 @@ counting command and should not be used as an ABI delta.
 | baseline (upstream) | 13,249,920 | — |
 | + resolver + cache + CRC32 + AEAD wrapper + hash | 13,259,136 | +9,216 bytes |
 | + signed v3 + hardened Android wiring | 13,259,456 | +9,536 bytes |
+| + explicit Backend A/B library loading | 13,259,584 | +9,664 bytes |
 
 The Ed25519/SHA-256 authenticity path added 320 bytes over the previous
-stripped prototype under the pinned non-LTO build configuration. The whole
-asset system adds 9,536 bytes against the earlier upstream measurement.
+stripped prototype under the pinned non-LTO build configuration. Explicit
+native library loading adds a further 128 bytes; the whole asset system adds
+9,664 bytes against the earlier upstream measurement.
 zlib and BoringSSL were already linked into `libflutter.so`; the index's
 `16×asset_count + 64` bytes are payload data, not engine code.
 

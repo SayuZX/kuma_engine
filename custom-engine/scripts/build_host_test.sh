@@ -38,3 +38,7 @@ bash "$ENGINE_ROOT/custom-engine/tests/integration_roundtrip.sh"
 echo "==> run synthetic APK release gate tests"
 ENGINE_SRC="$ENGINE_SRC" python3 \
   "$ENGINE_ROOT/custom-engine/tests/release_gate_fixture.py"
+
+echo "==> run shared-library payload symbol test"
+ENGINE_SRC="$ENGINE_SRC" python3 \
+  "$ENGINE_ROOT/custom-engine/tests/native_library_fixture.py"

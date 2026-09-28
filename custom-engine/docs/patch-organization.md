@@ -11,8 +11,8 @@ hardening. Suggested commit split when upstreaming:
    resolver routes `HashAssetKey` through it.
 3. **Packer** — `custom-engine/asset_packer/` (`flutter_asset_packer.dart`,
    `--inspect`, deterministic, alignment, crc32 sidecar) + Dart tests.
-4. **Engine integration + Backend A** — `android_shell_holder` wiring (weak
-   `__flutter_payload_start/_end`), `linker/payload_section.S`,
+4. **Engine integration + Backend A** — `android_shell_holder` wiring (explicit
+   `fml::NativeLibrary` load and `__flutter_payload_start/_end` lookup), `linker/payload_section.S`,
    `build_libpayload.sh`; `libflutter.so` relink.
 5. **Android packaging / Backend B** — `backend_b_experiment.sh` + docs.
 6. **Compression** — codec id in `flags`, zlib inflate, `assets` deps zlib;

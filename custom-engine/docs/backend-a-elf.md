@@ -23,18 +23,16 @@ On Apple hosts (used only for the host unit test) the same file targets a
 Mach-O `__DATA,__flutterpay` section; the C symbol names are identical. The
 section name differs only because Mach-O section names are capped at 16 chars.
 
-## Symbol contract
+## Symbol contract and loading
 
-The engine wiring in `android_shell_holder.cc` declares the two symbols weak:
-
-```cpp
-__attribute__((weak)) extern const uint8_t __flutter_payload_start[];
-__attribute__((weak)) extern const uint8_t __flutter_payload_end[];
-```
-
-If no `libpayload.so` is loaded, both resolve to null and the resolver is not
-added — behavior is identical to upstream. When present, the payload size is
-`__flutter_payload_end - __flutter_payload_start`.
+The Android shell holder calls the existing `fml::NativeLibrary::Create` on
+`libpayload.so` (then `libapp.so` for Backend B), then resolves `__flutter_payload_start` and
+`__flutter_payload_end` from that handle. It retains the library handle for the
+process lifetime, so mappings into its read-only section cannot outlive the
+library. Development builds fall back to the APK resolver if loading fails;
+hardened builds reject startup. The payload size is `end - start` after
+non-null and ordering checks. Explicit loading avoids depending on Android's
+inter-library weak-symbol resolution or Java library load order.
 
 ## Keeping the section
 
@@ -65,8 +63,8 @@ the shared object with the version script and `--gc-sections`, then verifies:
 
 ## Still open (needs a device / full engine relink)
 
-- Load-order and global-scope symbol resolution so `libflutter.so`'s weak refs
-  bind to `libpayload.so` at runtime on Android.
+- Android linker namespace visibility of the packaged `libpayload.so` must be
+  confirmed on a running device with the final APK.
 - Packaging an APK with `libpayload.so`, then
   confirming `rootBundle.load` / `Image.asset` on screen and `flutter_assets/`
   removed. Backend B (payload embedded directly in `libapp.so`) follows.

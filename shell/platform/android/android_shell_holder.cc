@@ -42,14 +42,18 @@ namespace flutter {
 
 namespace {
 
-extern "C" {
-__attribute__((weak)) extern const uint8_t __flutter_payload_start[];
-__attribute__((weak)) extern const uint8_t __flutter_payload_end[];
-}
-
 std::unique_ptr<PackedAssetResolver> CreateEmbeddedPackedResolver() {
-  const uint8_t* start = __flutter_payload_start;
-  const uint8_t* end = __flutter_payload_end;
+  // Keep the loaded library mapped for every mapping returned by the resolver.
+  static const auto payload_library = [] {
+    auto backend_a = fml::NativeLibrary::Create("libpayload.so");
+    return backend_a ? backend_a : fml::NativeLibrary::Create("libapp.so");
+  }();
+  if (!payload_library) {
+    return nullptr;
+  }
+  const uint8_t* start =
+      payload_library->ResolveSymbol("__flutter_payload_start");
+  const uint8_t* end = payload_library->ResolveSymbol("__flutter_payload_end");
   if (start == nullptr || end == nullptr || end <= start) {
     return nullptr;
   }
