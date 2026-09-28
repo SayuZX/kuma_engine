@@ -35,11 +35,13 @@ is invalid and simply not added — behavior is then identical to upstream.
 ## Runtime pipeline
 
 1. Startup: construct resolver from `(payload, size)`; validate header + index
-   bounds only (O(1)). No blob scan, no decompress, no decrypt at startup.
+   bounds and, for signed v3, verify the compact index/digest-table signature.
+   No blob scan, decompress, or decrypt at startup.
 2. Lookup (`GetAsMapping(key)`): `hash = FNV-1a64(key)`, binary search the index,
    re-validate block bounds, return a mapping.
-3. Uncompressed asset returns a zero-copy `fml::NonOwnedMapping` pointing into the
-   payload. (Compressed/encrypted paths, which own a decoded buffer, land later.)
+3. A signed v3 block is checked against its signed SHA-256/128 digest. Plain
+   uncompressed blocks return a zero-copy `fml::NonOwnedMapping`; compressed or
+   encrypted blocks return a mapping that owns the decoded buffer.
 
 ## Ownership / lifetime
 
@@ -49,9 +51,8 @@ is invalid and simply not added — behavior is then identical to upstream.
 - The resolver is owned by `AssetManager` via `unique_ptr`; it lives as long as
   the isolate's asset manager.
 - Zero-copy mappings point into the payload region and need no release proc,
-  because that region outlives every mapping. The only copy in v1 is none (all
-  assets uncompressed); the future decompress path documents its single owning
-  copy in `fml::DataMapping`.
+  because that region outlives every mapping. Decoded buffers use a shared
+  owner retained by the mapping and optional LRU cache.
 
 ## Threading
 
@@ -59,8 +60,8 @@ is invalid and simply not added — behavior is then identical to upstream.
 - After construction the resolver is immutable (`payload_`, `size_`, `count_`,
   offsets are const/settled), so concurrent `GetAsMapping` calls from UI/IO
   threads are lock-free and safe.
-- The only future mutable state is the optional decompressed-asset cache, which
-  will own its synchronization and stay off the zero-copy hot path.
+- The optional decompressed-asset cache owns its synchronization and stays off
+  the zero-copy hot path.
 
 ## Error handling
 
@@ -84,11 +85,11 @@ release builds emit nothing and leak no key strings.
 
 ## Known limitations / non-goals
 
-- Not a security boundary. Hashing the key list and (later) encrypting blocks
-  raises the cost of static extraction; it does not make client-side keys secret.
-- v1 is uncompressed and unencrypted; the resolver returns `nullptr` for a block
-  marked compressed. Compression, mmap, cache, integrity-in-binary, and
-  encryption are separate, later milestones.
+- Signed v3 authenticates metadata and stored blocks offline. It does not
+  conceal bytes or make a client-side decryption key secret.
+- v1/v2 remain supported for development. Hardened Android accepts signed v3
+  only; see `signed-format-v3.md`. The current v3 path authenticates but does
+  not conceal raw asset bytes.
 - End-to-end proof on a device (real APK, `Image.asset` on screen) is a later
   milestone; current proof is at the engine-resolver and packer level.
 - Standard `assets_unittests` target pulls Impeller (Metal) on this host; the

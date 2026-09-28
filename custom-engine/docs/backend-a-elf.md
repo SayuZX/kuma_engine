@@ -67,6 +67,6 @@ the shared object with the version script and `--gc-sections`, then verifies:
 
 - Load-order and global-scope symbol resolution so `libflutter.so`'s weak refs
   bind to `libpayload.so` at runtime on Android.
-- Relinking `libflutter.so` and packaging an APK with `libpayload.so`, then
+- Packaging an APK with `libpayload.so`, then
   confirming `rootBundle.load` / `Image.asset` on screen and `flutter_assets/`
   removed. Backend B (payload embedded directly in `libapp.so`) follows.

@@ -20,10 +20,14 @@ hardening. Suggested commit split when upstreaming:
 7. **Cache** — `packed_asset_cache.{h,cc}` + tests; resolver cache path; wiring.
 8. **Integrity** — per-entry CRC32, header flag, `VerifyIntegrity()`, fuzz test.
 9. **Encryption** — `packed_asset_crypto.{h,cc}` (BoringSSL), `asset_encryptor`,
-   resolver decrypt, split key; tests + integration.
+   resolver decrypt; tests + integration. The demonstration XOR key was removed
+   when the offline signing path landed.
 10. **Benchmark / verification** — `compression_bench.dart`, host suite script,
     `verify_release_apk.sh`.
 11. **ARM64** — evaluated; kept C++ (see docs/arm64-optimization.md).
+12. **Offline authentication** — signed v3 metadata and block digests,
+    `asset_signer` host tool, hardened Android public-key wiring, release gate;
+    remove the Android demo XOR key.
 
 Each of steps 1–9 was built for the host, unit-tested, and (for the engine-side
 changes) relinked into `libflutter.so` for arm64 before moving on. The single

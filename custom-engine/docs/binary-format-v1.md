@@ -108,8 +108,9 @@ Per-entry CRC32 of the stored bytes is carried in the entry's last 4 bytes
 validates it on load and via `VerifyIntegrity()`. This is an accidental-corruption
 check, not tamper resistance — see `docs/integrity.md`.
 
-## Not yet honored (planned)
+## Later formats and remaining work
 
 - xxh3 hashing with secondary fingerprint for collision handling.
-- Optional authenticated encryption (AES-256-GCM / ChaCha20-Poly1305), whose
-  AEAD tag — distinct from the CRC32 — provides authenticity.
+- Optional ChaCha20-Poly1305 is implemented for host tooling and resolver calls.
+  Signed v3 adds an Ed25519 public-key authentication path; see
+  `signed-format-v3.md`. Neither changes the v1/v2 key hash layout.

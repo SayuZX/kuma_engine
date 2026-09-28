@@ -1,8 +1,8 @@
 diff --git a/assets/BUILD.gn b/assets/BUILD.gn
-index eefdaf5..5a8d9d5 100644
+index eefdaf5eb02c72b243fe8daddc374ca30010204a..5484c9e8c4999886092370abe40697c330313242 100644
 --- a/assets/BUILD.gn
 +++ b/assets/BUILD.gn
-@@ -2,19 +2,92 @@
+@@ -2,19 +2,106 @@
  # Use of this source code is governed by a BSD-style license that can be
  # found in the LICENSE file.
  
@@ -23,6 +23,8 @@ index eefdaf5..5a8d9d5 100644
 +    "packed_asset_crypto.h",
 +    "packed_asset_resolver.cc",
 +    "packed_asset_resolver.h",
++    "packed_asset_signature.cc",
++    "packed_asset_signature.h",
    ]
  
    deps = [
@@ -47,6 +49,7 @@ index eefdaf5..5a8d9d5 100644
 +
 +    deps = [
 +      ":assets",
++      "//flutter/third_party/boringssl",
 +      "//flutter/third_party/googletest:gtest",
 +      "//flutter/third_party/googletest:gtest_main",
 +    ]
@@ -75,6 +78,17 @@ index eefdaf5..5a8d9d5 100644
 +    ]
 +  }
 +
++  executable("asset_signer") {
++    testonly = true
++
++    sources = [ "asset_signer.cc" ]
++
++    deps = [
++      ":assets",
++      "//flutter/third_party/boringssl",
++    ]
++  }
++
 +  source_set("packed_payload_section_fixture") {
 +    testonly = true
 +    sources = [ "packed_payload_section.S" ]
@@ -96,7 +110,7 @@ index eefdaf5..5a8d9d5 100644
 +  }
 +}
 diff --git a/assets/asset_resolver.h b/assets/asset_resolver.h
-index f8ec95e..1578502 100644
+index f8ec95ece6797566a12b041afc8ed75604df6da9..1578502545e93cd3975f4bb9a83cbfdd115987ee 100644
 --- a/assets/asset_resolver.h
 +++ b/assets/asset_resolver.h
 @@ -30,7 +30,8 @@ class AssetResolver {
@@ -109,19 +123,50 @@ index f8ec95e..1578502 100644
    };
  
    virtual const AssetManager* as_asset_manager() const { return nullptr; }
+diff --git a/shell/platform/android/BUILD.gn b/shell/platform/android/BUILD.gn
+index 6f062431cf74743e5a78a65dc735985f2139698b..b878b466337d4b4471e378c29f3894fd19881e97 100644
+--- a/shell/platform/android/BUILD.gn
++++ b/shell/platform/android/BUILD.gn
+@@ -13,6 +13,10 @@ import("//flutter/shell/gpu/gpu.gni")
+ import("//flutter/shell/version/version.gni")
+ import("//flutter/vulkan/config.gni")
+ 
++declare_args() {
++  flutter_custom_asset_hardened = false
++}
++
+ shell_gpu_configuration("android_gpu_configuration") {
+   enable_software = true
+   enable_gl = true
+@@ -173,6 +177,9 @@ source_set("flutter_shell_native_src") {
+   public_configs = [ "//flutter:config" ]
+ 
+   defines = []
++  if (flutter_custom_asset_hardened) {
++    defines += [ "FLUTTER_CUSTOM_ASSET_HARDENED=1" ]
++  }
+ 
+   libs = [
+     "android",
 diff --git a/shell/platform/android/android_shell_holder.cc b/shell/platform/android/android_shell_holder.cc
-index e86effe..ef09e21 100644
+index e86effe09bd92ee15e199f1457cfab138be3ca09..6bacea18a410cac48d94e1f393e8b5015f943537 100644
 --- a/shell/platform/android/android_shell_holder.cc
 +++ b/shell/platform/android/android_shell_holder.cc
-@@ -16,6 +16,7 @@
+@@ -16,6 +16,13 @@
  #include <string>
  #include <utility>
  
 +#include "flutter/assets/packed_asset_resolver.h"
++#if defined(FLUTTER_CUSTOM_ASSET_HARDENED)
++#if !__has_include("flutter/assets/packed_asset_public_key_generated.h")
++#error "Generate packed_asset_public_key_generated.h before a hardened build"
++#endif
++#include "flutter/assets/packed_asset_public_key_generated.h"
++#endif
  #include "flutter/fml/cpu_affinity.h"
  #include "flutter/fml/logging.h"
  #include "flutter/fml/make_copyable.h"
-@@ -33,6 +34,46 @@
+@@ -33,6 +40,39 @@
  
  namespace flutter {
  
@@ -131,15 +176,6 @@ index e86effe..ef09e21 100644
 +__attribute__((weak)) extern const uint8_t __flutter_payload_start[];
 +__attribute__((weak)) extern const uint8_t __flutter_payload_end[];
 +}
-+
-+const uint8_t kPackedKeyPartA[32] = {
-+    0x3b, 0x1e, 0x55, 0x90, 0xa2, 0x0c, 0x71, 0xf4, 0x88, 0x2d, 0x6b,
-+    0xc9, 0x14, 0x7e, 0x33, 0xa0, 0x5c, 0xe1, 0x09, 0x47, 0xbb, 0x82,
-+    0x36, 0xd5, 0x1f, 0x60, 0xaa, 0x0d, 0x93, 0x27, 0x4e, 0xf1};
-+const uint8_t kPackedKeyPartB[32] = {
-+    0x3b, 0x1f, 0x56, 0x93, 0xa6, 0x09, 0x77, 0xf3, 0x80, 0x24, 0x61,
-+    0xc2, 0x18, 0x73, 0x3d, 0xaf, 0x4c, 0xf0, 0x19, 0x58, 0xab, 0x93,
-+    0x28, 0xca, 0x07, 0x79, 0xb0, 0x10, 0x8f, 0x3a, 0x54, 0xee};
 +
 +std::unique_ptr<PackedAssetResolver> CreateEmbeddedPackedResolver() {
 +  const uint8_t* start = __flutter_payload_start;
@@ -151,12 +187,14 @@ index e86effe..ef09e21 100644
 +  constexpr size_t kCacheMaxItemBytes = 4 * 1024 * 1024;
 +  auto cache = std::make_shared<PackedAssetCache>(kCacheCapacityBytes,
 +                                                  kCacheMaxItemBytes);
-+  uint8_t key[32];
-+  for (size_t i = 0; i < sizeof(key); ++i) {
-+    key[i] = kPackedKeyPartA[i] ^ kPackedKeyPartB[i];
-+  }
++#if defined(FLUTTER_CUSTOM_ASSET_HARDENED)
 +  auto resolver = std::make_unique<PackedAssetResolver>(
-+      start, static_cast<size_t>(end - start), std::move(cache), key);
++      start, static_cast<size_t>(end - start), std::move(cache), nullptr,
++      kPackedPayloadPublicKey);
++#else
++  auto resolver = std::make_unique<PackedAssetResolver>(
++      start, static_cast<size_t>(end - start), std::move(cache));
++#endif
 +  if (!resolver->IsValid()) {
 +    return nullptr;
 +  }
@@ -168,13 +206,21 @@ index e86effe..ef09e21 100644
  /// Inheriting ThreadConfigurer and use Android platform thread API to configure
  /// the thread priorities
  static void AndroidPlatformThreadConfigSetter(
-@@ -337,6 +378,9 @@ std::optional<RunConfiguration> AndroidShellHolder::BuildRunConfiguration(
+@@ -337,7 +377,17 @@ std::optional<RunConfiguration> AndroidShellHolder::BuildRunConfiguration(
    }
  
    RunConfiguration config(std::move(isolate_configuration));
++#if defined(FLUTTER_CUSTOM_ASSET_HARDENED)
++  auto packed = CreateEmbeddedPackedResolver();
++  if (!packed || !config.AddAssetResolver(std::move(packed))) {
++    return std::nullopt;
++  }
++#else
 +  if (auto packed = CreateEmbeddedPackedResolver()) {
 +    config.AddAssetResolver(std::move(packed));
 +  }
    config.AddAssetResolver(apk_asset_provider_->Clone());
++#endif
  
    {
+     if (!entrypoint.empty() && !libraryUrl.empty()) {

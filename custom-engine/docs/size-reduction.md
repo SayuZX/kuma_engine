@@ -9,14 +9,15 @@ output shipped in `lib.stripped/`).
 
 | Lever | Before | After | Saving | Risk |
 |---|---:|---:|---:|---|
-| Symbol strip (unstripped → shipped `lib.stripped/libflutter.so`) | 327,181,808 | 13,259,136 | 313,922,672 (95.9%) | none — release ships the stripped lib |
-| Exported-symbol minimization (`android_exports.lst` version script) | 68 exported | 68 exported | +0 from our code | none — keeps JNI/embedding exports intact |
+| Symbol strip (current hardened build, unstripped → shipped `lib.stripped/libflutter.so`) | 327,189,552 | 13,259,456 | 313,930,096 (95.9%) | none — release ships the stripped lib |
+| Exported-symbol minimization (`android_exports.lst` version script) | — | 70 defined dynamic symbols | no asset-specific exports | keeps JNI/embedding exports intact |
 | Section GC + hidden visibility (`--gc-sections`, `-fvisibility=hidden`) | — | — | dead sections dropped | none — already in release config |
 
 The dominant, safe win is stripping; it is already in effect for the shipped
 library. Every symbol our code adds is internal: `nm -D` shows zero
-`PackedAsset*` / `asset_hash*` / crypto symbols exported, so the ABI surface
-(section Q) is unchanged at 68 exported symbols.
+`PackedAsset*` / `asset_hash*` / signature symbols exported. This build has 70
+defined dynamic symbols; the earlier 68 count was not reproduced with the same
+counting command and should not be used as an ABI delta.
 
 ## Footprint of the packed-asset system itself
 
@@ -24,10 +25,13 @@ library. Every symbol our code adds is internal: `nm -D` shows zero
 |---|---:|---:|
 | baseline (upstream) | 13,249,920 | — |
 | + resolver + cache + CRC32 + AEAD wrapper + hash | 13,259,136 | +9,216 bytes |
+| + signed v3 + hardened Android wiring | 13,259,456 | +9,536 bytes |
 
-The entire system — resolver, LRU cache, integrity, ChaCha20-Poly1305 wrapper,
-and the hash module — adds ~9 KB stripped. zlib and BoringSSL were already linked
-into `libflutter.so`, so compression and encryption added no new library bulk.
+The Ed25519/SHA-256 authenticity path added 320 bytes over the previous
+stripped prototype under the pinned non-LTO build configuration. The whole
+asset system adds 9,536 bytes against the earlier upstream measurement.
+zlib and BoringSSL were already linked into `libflutter.so`; the index's
+`16×asset_count + 64` bytes are payload data, not engine code.
 
 ## Available but NOT applied (each needs build + test + measure; higher risk)
 

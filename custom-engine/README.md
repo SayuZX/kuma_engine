@@ -67,10 +67,15 @@ unverified because this repository clone has no synced engine dependencies.
       the Android shell holder.
 - [x] Encryption (AEAD, optional): ChaCha20-Poly1305 via in-tree BoringSSL on
       both sides — `asset_encryptor` build tool + resolver decrypt. Order
-      compress→encrypt→store; read authenticate→decrypt→decompress. Split key
-      (XOR of two components at runtime). End-to-end proven: without key the
+      compress→encrypt→store; read authenticate→decrypt→decompress. The former
+      Android demo XOR key has been removed. End-to-end proven: without key the
       encrypted payload is unreadable, with key all assets read byte-identical;
       wrong key / tampered block → authentication failure. See docs/encryption.md.
+- [x] Offline signed format v3: Ed25519-authenticated index and per-block
+      SHA-256/128 digests; private key kept at build time, public key compiled
+      into hardened Android engine. Hardened mode requires a signed payload and
+      has no APK asset fallback. Host round-trip and tamper rejection pass.
+      See docs/signed-format-v3.md.
 - [x] mmap / zero-copy: payload section is loader-mmap'd read-only; uncompressed
       and cache-hit reads are zero-copy; copies documented (docs/mmap-zero-copy.md).
 - [x] Size analysis: strip removes 95.9%; whole system adds +9,216 B stripped;
@@ -81,7 +86,7 @@ unverified because this repository clone has no synced engine dependencies.
 - [x] Reproducible build: pinned revisions in `engine_build_config.json`.
 - [ ] Runtime end-to-end (device-gated): package APK with `libpayload.so`,
       confirm `Image.asset` / `rootBundle.load` on a device and `flutter_assets/`
-      removed, then run `scripts/verify_release_apk.sh`. Needs a device/emulator
+      removed, then run `scripts/verify_release_apk.sh --public <key>`. Needs a device/emulator
       and a demo app; everything up to this point is verified host-side.
 
 ## Run the host tests (no device, no Metal toolchain)

@@ -30,22 +30,21 @@ decrypt is attempted; the AEAD tag catches tampering.
 
 ## Nonce
 
-The encryptor derives the nonce as the first 12 bytes of
-`SHA-256(key || stored_block)` and stores it in the block. This is deterministic
-(reproducible builds) and content-sensitive, so the same key is never reused with
-a different plaintext under the same asset — while identical content yields an
-identical nonce, which is safe.
+The existing test encryptor derives the nonce as the first 12 bytes of
+`SHA-256(key || stored_block)` and stores it in the block. This makes builds
+reproducible but leaks equality of identical stored blocks and is not a formal
+misuse-resistant AEAD construction. Revisit nonce allocation before deploying
+this optional encryption path at scale.
 
 ## Key handling and honest limits
 
-The key is 32 bytes. In the engine it is assembled at runtime by XOR-ing two
-separately-stored components (`kPackedKeyPartA`, `kPackedKeyPartB`) rather than
-sitting as one plaintext array. This **only raises the effort of static
-extraction** — a client-side key is not, and cannot be, truly secret; a
-determined reverse-engineer can recover it. Encryption here is a
-static-extraction hardening measure, not a DRM guarantee. The build tool takes
-the key as `--key <64 hex>`; a real deployment must feed the same key to the
-encryptor and the engine components.
+The key is 32 bytes and is passed to the resolver by an external key provider.
+The Android shell holder no longer contains the former demo XOR key. Hardened
+Android builds currently provide a public signing key only, so encrypted blocks
+cannot be opened there until a deployment supplies an explicit key provider.
+The build tool takes the AEAD key as `--key <64 hex>` for host testing. A fully
+offline client-side key cannot be truly secret against a determined device
+owner. See `signed-format-v3.md` for the shipping offline integrity path.
 
 ## Verification (host, no device)
 
@@ -61,5 +60,5 @@ fail authentication and return `nullptr`.
 ## Separation from integrity
 
 The CRC32 (docs/integrity.md) is a non-cryptographic corruption check; the
-Poly1305 tag is the authenticity check. They are distinct fields with distinct
-meaning and are never conflated.
+Poly1305 tag authenticates an encrypted block. The signed v3 format separately
+authenticates metadata and stored blocks without decryption.

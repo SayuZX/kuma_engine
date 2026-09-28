@@ -24,17 +24,22 @@ These are deliberately separate concerns and are not conflated.
   attacker who edits a block can recompute the CRC. Do not treat a valid CRC as
   proof of authenticity.
 
-## Authentication (not implemented here): AEAD
+## Authentication (implemented in v3): signed index and block digests
 
-Tamper resistance requires a keyed MAC / authenticated encryption
-(AES-256-GCM or ChaCha20-Poly1305 via the in-tree BoringSSL), which is the
-separate, optional encryption milestone. Its authentication tag — not the CRC32
-— is what proves a block was produced by the key holder. Because the key ships
-in the client, even that only raises the cost of static extraction; it is not a
-secret-keeping guarantee.
+Format v3 signs the header, index, and per-block SHA-256/128 digests with
+Ed25519. The engine carries the public verification key and verifies each block
+on demand. The private key remains with the builder, so a modified block cannot
+be accepted by an unchanged engine without forging the signature or digest.
+This proves payload origin relative to the compiled public key; it does not
+conceal raw bytes. See `signed-format-v3.md`.
+
+The optional ChaCha20-Poly1305 codec has a distinct authentication tag for
+encrypted blocks. Offline client-side key storage remains extractable and is
+currently not wired into the hardened Android build.
 
 ## Why kept apart
 
-Mixing a non-cryptographic checksum with an authentication tag invites treating
-one as the other. The format carries the CRC32 as an integrity field only; when
-encryption lands, the AEAD tag will be a distinct field with distinct meaning.
+The v2 CRC32 is an accidental-corruption check. The v3 signature/digest chain
+authenticates a payload against a compiled public key. The optional AEAD tag
+authenticates an encrypted block against a symmetric key. These checks answer
+different questions and have separate fields and flags.
