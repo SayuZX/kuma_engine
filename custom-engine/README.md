@@ -95,13 +95,19 @@ unverified because this repository clone has no synced engine dependencies.
       SIMD — keep C++. `asset_hash_arm64` ABI + differential/known-vector tests
       in place for a future asm variant (docs/arm64-optimization.md).
 - [x] Reproducible build: pinned revisions in `engine_build_config.json`.
-- [ ] Runtime end-to-end (device-gated): install the Backend B demo candidate,
-      confirm `Image.asset` / `rootBundle.load` and fonts on Android, then measure
-      startup, latency and memory. ADB currently reports no connected device.
+- [x] Backend A KumaNime ARM64 and ARMv7 split APKs: signed, aligned,
+      payload-verified and launched on a physical Android device with Home
+      rendered for both ABIs. The 3.47 engine checkout was used; details are
+      in `docs/kumaanime-dual-abi.md`.
+- [ ] Backend B demo device run; also measure startup, latency and memory for
+      both backends and verify deeper application flows.
 - [ ] Hardened release: resolve the strict plaintext gate and verify the native
       3.27 port before calling this branch production ready.
 
 ## Run the host tests (no device, no Metal toolchain)
+
+The KumaNime dual-ABI Backend A APK workflow, measurements and remaining
+limits are in [docs/kumaanime-dual-abi.md](docs/kumaanime-dual-abi.md).
 
 ```bash
 bash custom-engine/scripts/build_host_test.sh

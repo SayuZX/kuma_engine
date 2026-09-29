@@ -57,5 +57,37 @@
     "gradle_workers": 1,
     "gradle_heap_mib": 2048,
     "note": "SDK engine revision and local GN engine_version are recorded separately. The SDK NDK directory must expose the installed version to Flutter's provisioning check."
+  },
+  "kumanime_backend_a_2026_09_29": {
+    "engine_checkout": "separate Flutter 3.47.5 checkout at commit 6a19cca56475dbfba1478ee68d7bd0c2ef891da1",
+    "engine_output_dirs": {
+      "arm64-v8a": "out/android_release_arm64",
+      "armeabi-v7a": "out/android_release"
+    },
+    "engine_gn_args": {
+      "target_os": "android",
+      "target_cpu": [
+        "arm64",
+        "arm"
+      ],
+      "flutter_runtime_mode": "release",
+      "dart_runtime_mode": "release",
+      "is_official_build": true,
+      "flutter_custom_asset_hardened": true,
+      "optimize_for_size": false,
+      "stripped_symbols": false
+    },
+    "android_ndk": "28.2.13676358",
+    "android_build_tools": "35.0.0",
+    "gradle": "9.3.1",
+    "android_gradle_plugin": "8.13.2",
+    "kotlin_gradle_plugin": "2.3.0",
+    "java": "Eclipse Temurin 17.0.20.1+1 (x86_64)",
+    "app_compile_sdk": 36,
+    "app_target_sdk": 34,
+    "app_min_sdk": 24,
+    "release_payload_format": 3,
+    "asset_count": 35,
+    "verification": "Backend A packaging and physical-device launch passed for both ABIs; repository 3.27 port remains native-build unverified"
   }
 }
