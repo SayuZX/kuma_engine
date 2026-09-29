@@ -1,29 +1,20 @@
 --- a/README.md
 +++ b/README.md
-@@ -20,8 +20,7 @@
- - The player Audio panel shares volume, native audio-track selection and Audio FX settings. A track is marked selected only after the player confirms it; duplicate-language tracks remain distinct.
- - Android first processes decoded PCM16 inside the local Better Player/Media3 pipeline, exposing only effects supported by the active channel format. Non-PCM output fails open to public per-session `DynamicsProcessing`/`Equalizer`/`Virtualizer` effects. Neither path is Atmos.
- - Desktop uses the existing fvp/MDK engine's `audio.avfilter` processing. Web and iOS do not expose these native effects.
+@@ -23,2 +23 @@
 -- Audio FX runs inside Nova without detecting or opening any device-provided Dolby app. It uses standard platform audio APIs, not the bundled APKs or an Atmos implementation.
 -- Android builds include `DolbySound.apk` and `daxService.apk` from the [Sony Xperia 5 V Magisk module](https://github.com/reiryuki/Dolby-Atmos-Sony-Xperia-5-V-Magisk-Module/tree/2fabde4c730f9027cd628088852e02efee62b72e) under `android/app/src/main/assets/dolby/`. They are files only: no automatic installation, engine integration, system changes or Dolby controls. Packaging them does not enable Dolby on an unrooted device. Their proprietary redistribution rights remain unestablished; obtain permission before distributing builds containing them. See [NOTICE](NOTICE) for provenance and checksums.
 +- Audio FX runs inside Nova with standard platform audio APIs. Release builds do not bundle Dolby APKs or implement Atmos processing.
- 
- ## Getting Started
- 
-@@ -34,15 +33,23 @@
- 
- ### Building from Source
- 
+@@ -31 +30 @@
+-- Flutter (compatible with SDK `>=3.2.0 <4.0.0`)
++- Flutter 3.47.5 at framework commit `6a19cca56475dbfba1478ee68d7bd0c2ef891da1` for the packed Android release; its custom engine must be built from the matching checkout.
+@@ -37 +36,2 @@
 -To build a release APK, follow these commands:
 +To build signed Android release APKs for ARM64 and ARMv7 with the custom
 +packed-asset engine, use:
- 
- ```bash
- flutter pub get
+@@ -41 +41 @@
 -flutter build apk --release
 +bash tool/build_packed_release.sh -v
- ```
- 
+@@ -44,2 +44,9 @@
 -The compiled APK will be located at:
 -`build/app/outputs/flutter-apk/app-release.apk`
 +The build requires both hardened custom-engine libraries, the matching offline
@@ -35,26 +26,14 @@
 +`build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk`. The size and hash
 +report is `build/app/outputs/packed-release-report.json`. Direct
 +`flutter build apk --release` is blocked so it cannot ship `flutter_assets`.
- 
- ### Building for macOS
- 
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -14,7 +14,7 @@
- - Preserve desktop support/cache data during the product-name change without overwriting newer records or reimporting deleted credentials.
- - Process decoded Android PCM16 in the Better Player/Media3 pipeline with capability-aware EQ, preamp, dialogue shaping and stereo widening; fail open to public session effects for unsupported output, without proprietary components.
- - Use native audio-track identities and acknowledged selection, preserve unambiguous choices after reload, and apply desktop effects through MDK's `audio.avfilter` API.
+@@ -17 +17 @@
 -- Bundle the upstream `DolbySound.apk` and `daxService.apk` as Android-only assets, without installation or playback integration; record source revision, checksums and proprietary redistribution limitations in NOTICE.
 +- Remove unused Dolby APKs from Android release assets to reduce the package without changing Audio FX playback.
- 
- ### 🎉 New Features
- * [7d8a9ac](https://github.com/SayuZX/KumaAnime-App/commit/7d8a9ac): feat: rollback animepahe to HLS streams
 --- a/NOTICE
 +++ b/NOTICE
-@@ -33,40 +33,9 @@
- effects depend on the decoded format, device, and output route. None of
- these enhancements requires Sony or Dolby components.
- 
+@@ -36,8 +36,3 @@
 -The Android build bundles two unmodified APK files as inert assets:
 -  android/app/src/main/assets/dolby/DolbySound.apk
 -  android/app/src/main/assets/dolby/daxService.apk
@@ -66,8 +45,7 @@
 +Nova does not bundle DolbySound.apk, daxService.apk, Dolby engine libraries,
 +or proprietary system components. Its in-player effects use public Android
 +audio APIs and do not implement Dolby Atmos or Dolby Audio Processing.
- 
- "Dolby", "Dolby Atmos" and "Dolby Audio" are trademarks of Dolby
+@@ -46,27 +41 @@
 -Laboratories, Inc.; "Sony" is a trademark of Sony Group Corporation. These
 -names are used only to explain compatibility and licensing limitations.
 -These APKs originate from the third-party Magisk module below, not an
@@ -98,10 +76,7 @@
 +Laboratories, Inc.; "Sony" is a trademark of Sony Group Corporation.
 --- a/android/app/build.gradle
 +++ b/android/app/build.gradle
-@@ -136,6 +136,23 @@
-     implementation platform('com.google.firebase:firebase-bom:34.15.0')
-     implementation 'com.google.firebase:firebase-auth'
-     implementation 'com.google.firebase:firebase-firestore'
+@@ -138,0 +139,17 @@
 +}
 +
 +// Release APKs require the signed payload packaging step. A direct Flutter
@@ -119,13 +94,9 @@
 +}
 +tasks.matching { it.name == "preReleaseBuild" }.configureEach {
 +    dependsOn("kumaRequirePackedRelease")
- }
- 
- // ── Auto-compile hidden assets before every flutter build ──
 --- a/tool/build_release_hidden_assets.sh
 +++ b/tool/build_release_hidden_assets.sh
-@@ -1,18 +1,3 @@
- #!/usr/bin/env bash
+@@ -2,17 +2,2 @@
 -set -e
 -ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 -cd "$ROOT"
@@ -147,12 +118,12 @@
 +exec "$(cd "$(dirname "$0")" && pwd)/build_packed_release.sh" "$@"
 --- a/tool/build_release_hidden_assets.ps1
 +++ b/tool/build_release_hidden_assets.ps1
-@@ -1,23 +1,2 @@
+@@ -1,4 +0,0 @@
 -param(
 -  [Parameter(ValueFromRemainingArguments=$true)]
 -  [string[]]$ExtraArgs
 -)
- $ErrorActionPreference = "Stop"
+@@ -6,18 +2 @@
 -$root = (Resolve-Path "$PSScriptRoot/..").Path
 -Set-Location $root
 -
