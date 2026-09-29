@@ -60,30 +60,39 @@ def verify(apk: Path, engine_src: Path, public_key: Path,
 
         with tempfile.TemporaryDirectory(prefix="kuma-apk-verify-") as temp_name:
             temp = Path(temp_name)
-            for library in ("libflutter.so", "libapp.so", "libpayload.so"):
-                (temp / library).write_bytes(archive.read(f"lib/{abi}/{library}"))
-                header = _run(llvm / "llvm-readelf", "-h", temp / library)
+            native_libraries = {}
+            native_names = sorted(
+                name for name in names
+                if name.startswith(f"lib/{abi}/") and name.endswith(".so")
+            )
+            for index, name in enumerate(native_names):
+                library = name.rsplit("/", 1)[-1]
+                extracted = temp / f"native-{index}.so"
+                extracted.write_bytes(archive.read(name))
+                native_libraries[library] = extracted
+                header = _run(llvm / "llvm-readelf", "-h", extracted)
                 if not re.search(rf"Machine:\s+{MACHINE[abi]}\b", header):
                     raise ValueError(f"wrong ELF machine: {library}")
-
-            for library in ("libflutter.so", "libapp.so", "libpayload.so"):
-                sections = _run(llvm / "llvm-readelf", "-S", temp / library)
+                sections = _run(llvm / "llvm-readelf", "-S", extracted)
                 if ".debug_info" in sections:
                     raise ValueError(f"debug information remains in {library}")
                 if ".symtab" in sections:
                     raise ValueError(f"static symbol table remains in {library}")
-            symbols = _run(llvm / "llvm-readelf", "--dyn-syms", temp / "libpayload.so")
+            payload_lib = native_libraries["libpayload.so"]
+            flutter_lib = native_libraries["libflutter.so"]
+            app_lib = native_libraries["libapp.so"]
+            symbols = _run(llvm / "llvm-readelf", "--dyn-syms", payload_lib)
             if "__flutter_payload_start" not in symbols or "__flutter_payload_end" not in symbols:
                 raise ValueError("native payload linker symbols missing")
-            if ASSET_PATH.search((temp / "libpayload.so").read_bytes()):
+            if ASSET_PATH.search(payload_lib.read_bytes()):
                 raise ValueError("plaintext asset path found in native payload")
-            if ASSET_PATH.search((temp / "libflutter.so").read_bytes()):
+            if ASSET_PATH.search(flutter_lib.read_bytes()):
                 raise ValueError("plaintext asset path found in Flutter engine")
-            dart_literal_count = len(set(ASSET_PATH.findall((temp / "libapp.so").read_bytes())))
+            dart_literal_count = len(set(ASSET_PATH.findall(app_lib.read_bytes())))
 
             payload = temp / "payload.bin"
             _run(llvm / "llvm-objcopy", "--dump-section",
-                 f".flutter_payload={payload}", temp / "libpayload.so")
+                 f".flutter_payload={payload}", payload_lib)
             if not payload.is_file() or not payload.stat().st_size:
                 raise ValueError("native ELF payload section missing")
             _run(signer, "verify", "--input", payload, "--public", public_key)

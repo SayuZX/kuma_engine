@@ -45,6 +45,9 @@ def inspect_archive(apk: Path, abi: str) -> None:
             raise ValueError("nested APK remains in release archive")
         if any(name.endswith(".symbols") for name in names):
             raise ValueError("Dart symbol archive remains in APK")
+        if any(name.startswith("lib/") and name.endswith(".so") and
+               len(name.split("/")) != 3 for name in names):
+            raise ValueError("nested native library remains in APK")
         actual_abis = _native_abis(names)
         if actual_abis != {abi}:
             raise ValueError(f"APK ABI mismatch: expected {abi}, got {sorted(actual_abis)}")
