@@ -140,6 +140,10 @@ def _engine_ready(out: Path, cpu: str, expected_header: bytes) -> Path:
 
 
 def _build(args: argparse.Namespace) -> None:
+    if args.obfuscate and not args.split_debug_info:
+        raise ValueError("--obfuscate requires --split-debug-info")
+    if args.skip_flutter_build and (args.obfuscate or args.split_debug_info):
+        raise ValueError("Dart AOT flags require a fresh Flutter build")
     app = args.app.resolve()
     flutter_root = args.flutter_root.resolve()
     custom = Path(__file__).resolve().parents[1]
@@ -190,6 +194,10 @@ def _build(args: argparse.Namespace) -> None:
         if not args.skip_flutter_build:
             command = [str(flutter_root / "bin/flutter"), "build", "apk", "--release",
                        "--target-platform", "android-arm,android-arm64", "--split-per-abi"]
+            if args.split_debug_info:
+                command.append(f"--split-debug-info={args.split_debug_info.resolve()}")
+            if args.obfuscate:
+                command.append("--obfuscate")
             if args.verbose:
                 command.append("-v")
             _run(*command, cwd=app)
@@ -201,6 +209,19 @@ def _build(args: argparse.Namespace) -> None:
         for source in sources.values():
             if not source.is_file():
                 raise FileNotFoundError(source)
+
+        symbol_report = {}
+        if args.split_debug_info:
+            symbol_dir = args.split_debug_info.resolve()
+            for abi, name in (("arm64-v8a", "app.android-arm64.symbols"),
+                              ("armeabi-v7a", "app.android-arm.symbols")):
+                symbol = symbol_dir / name
+                if not symbol.is_file():
+                    raise FileNotFoundError(symbol)
+                symbol_report[abi] = {
+                    "path": str(symbol), "bytes": symbol.stat().st_size,
+                    "sha256": _sha256(symbol),
+                }
 
         asset_dir = temp / "flutter_assets"
         asset_names = extract_matching_assets(list(sources.values()), asset_dir)
@@ -219,6 +240,7 @@ def _build(args: argparse.Namespace) -> None:
         signed_outputs = {}
         report = {"asset_count": len(asset_names),
                   "engine_output_dirs": engine_outputs,
+                  "dart_symbols": symbol_report,
                   "signed_payload_bytes": signed_payload.stat().st_size,
                   "payload_sha256": _sha256(signed_payload), "apks": {}}
         sign_env = os.environ.copy()
@@ -306,6 +328,10 @@ def main() -> None:
     parser.add_argument("--key-dir", type=Path, default=Path("~/.config/kuma-engine"))
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--skip-flutter-build", action="store_true")
+    parser.add_argument("--split-debug-info", type=Path,
+                        help="persistent host directory for Dart stack symbols")
+    parser.add_argument("--obfuscate", action="store_true",
+                        help="obfuscate Dart identifiers (requires --split-debug-info)")
     parser.add_argument("--replace-standard", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

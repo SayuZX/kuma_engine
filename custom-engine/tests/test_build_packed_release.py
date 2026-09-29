@@ -1,13 +1,14 @@
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from build_packed_release import _size_breakdown, extract_matching_assets
+from build_packed_release import _build, _size_breakdown, extract_matching_assets
 
 
 class ExtractAssetsTest(unittest.TestCase):
@@ -51,6 +52,11 @@ class ExtractAssetsTest(unittest.TestCase):
         self.assertEqual(sizes["dolby_apks_zip_bytes"], 20)
         self.assertEqual(sizes["libflutter_bytes"], 6)
         self.assertEqual(sizes["libpayload_bytes"], 0)
+
+    def test_rejects_obfuscation_without_symbol_archive(self):
+        with self.assertRaisesRegex(ValueError, "requires --split-debug-info"):
+            _build(SimpleNamespace(obfuscate=True, split_debug_info=None,
+                                   skip_flutter_build=False))
 
 
 if __name__ == "__main__":
