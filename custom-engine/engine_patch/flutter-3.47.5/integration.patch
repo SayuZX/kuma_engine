@@ -1,0 +1,255 @@
+diff --git a/engine/src/flutter/assets/BUILD.gn b/engine/src/flutter/assets/BUILD.gn
+index c470cb6971c..73749b11a20 100644
+--- a/engine/src/flutter/assets/BUILD.gn
++++ b/engine/src/flutter/assets/BUILD.gn
+@@ -11,6 +11,8 @@ if (is_fuchsia) {
+ 
+ source_set("assets") {
+   sources = [
++    "asset_hash.cc",
++    "asset_hash.h",
+     "asset_manager.cc",
+     "asset_manager.h",
+     "asset_resolver.h",
+@@ -18,12 +20,22 @@ source_set("assets") {
+     "directory_asset_bundle.h",
+     "native_assets.cc",
+     "native_assets.h",
++    "packed_asset_cache.cc",
++    "packed_asset_cache.h",
++    "packed_asset_crypto.cc",
++    "packed_asset_crypto.h",
++    "packed_asset_resolver.cc",
++    "packed_asset_resolver.h",
++    "packed_asset_signature.cc",
++    "packed_asset_signature.h",
+   ]
+ 
+   deps = [
+     "//flutter/common",
+     "//flutter/fml",
++    "//flutter/third_party/boringssl",
+     "//flutter/third_party/rapidjson",
++    "//flutter/third_party/zlib",
+   ]
+ 
+   public_configs = [ "//flutter:config" ]
+@@ -37,12 +49,18 @@ if (enable_unittests) {
+   executable("assets_unittests") {
+     testonly = true
+ 
+-    sources = [ "native_assets_unittests.cc" ]
++    sources = [
++      "asset_hash_unittests.cc",
++      "native_assets_unittests.cc",
++      "packed_asset_cache_unittests.cc",
++      "packed_asset_resolver_unittests.cc",
++    ]
+ 
+     deps = [
+       ":assets",
+       ":assets_fixtures",
+       "//flutter/testing",
++      "//flutter/third_party/boringssl",
+     ]
+ 
+     if (!defined(defines)) {
+@@ -55,4 +73,79 @@ if (enable_unittests) {
+       libs = [ "${fuchsia_arch_root}/sysroot/lib/libzircon.so" ]
+     }
+   }
++
++  executable("packed_asset_resolver_smoketest") {
++    testonly = true
++
++    sources = [
++      "asset_hash_unittests.cc",
++      "packed_asset_cache_unittests.cc",
++      "packed_asset_resolver_unittests.cc",
++    ]
++
++    deps = [
++      ":assets",
++      "//flutter/third_party/boringssl",
++      "//flutter/third_party/googletest:gtest",
++      "//flutter/third_party/googletest:gtest_main",
++    ]
++
++    if (is_fuchsia) {
++      libs = [ "${fuchsia_arch_root}/sysroot/lib/libzircon.so" ]
++    }
++  }
++
++  executable("packed_asset_resolver_filecheck") {
++    testonly = true
++
++    sources = [ "packed_asset_resolver_filecheck.cc" ]
++
++    deps = [
++      ":assets",
++      "//flutter/fml",
++    ]
++  }
++
++  executable("asset_encryptor") {
++    testonly = true
++
++    sources = [ "asset_encryptor.cc" ]
++
++    deps = [
++      ":assets",
++      "//flutter/third_party/boringssl",
++      "//flutter/third_party/zlib",
++    ]
++  }
++
++  executable("asset_signer") {
++    testonly = true
++
++    sources = [ "asset_signer.cc" ]
++
++    deps = [
++      ":assets",
++      "//flutter/third_party/boringssl",
++    ]
++  }
++
++  source_set("packed_payload_section_fixture") {
++    testonly = true
++    sources = [ "packed_payload_section.S" ]
++    include_dirs = [ "testdata" ]
++    defines = [ "PAYLOAD_FILE=\"packed_payload_fixture.bin\"" ]
++  }
++
++  executable("packed_payload_section_test") {
++    testonly = true
++
++    sources = [ "packed_payload_section_test.cc" ]
++
++    deps = [
++      ":assets",
++      ":packed_payload_section_fixture",
++      "//flutter/third_party/googletest:gtest",
++      "//flutter/third_party/googletest:gtest_main",
++    ]
++  }
+ }
+diff --git a/engine/src/flutter/assets/asset_resolver.h b/engine/src/flutter/assets/asset_resolver.h
+index f8ec95ece67..1578502545e 100644
+--- a/engine/src/flutter/assets/asset_resolver.h
++++ b/engine/src/flutter/assets/asset_resolver.h
+@@ -30,7 +30,8 @@ class AssetResolver {
+   enum AssetResolverType {
+     kAssetManager,
+     kApkAssetProvider,
+-    kDirectoryAssetBundle
++    kDirectoryAssetBundle,
++    kPackedAssetProvider
+   };
+ 
+   virtual const AssetManager* as_asset_manager() const { return nullptr; }
+diff --git a/engine/src/flutter/shell/platform/android/BUILD.gn b/engine/src/flutter/shell/platform/android/BUILD.gn
+index 40c209ca925..38a7f9b122e 100644
+--- a/engine/src/flutter/shell/platform/android/BUILD.gn
++++ b/engine/src/flutter/shell/platform/android/BUILD.gn
+@@ -14,6 +14,10 @@ import("//flutter/shell/gpu/gpu.gni")
+ import("//flutter/shell/version/version.gni")
+ import("//flutter/vulkan/config.gni")
+ 
++declare_args() {
++  flutter_custom_asset_hardened = false
++}
++
+ shell_gpu_configuration("android_gpu_configuration") {
+   enable_software = true
+   enable_gl = true
+@@ -188,6 +192,9 @@ source_set("flutter_shell_native_src") {
+   public_configs = [ "//flutter:config" ]
+ 
+   defines = []
++  if (flutter_custom_asset_hardened) {
++    defines += [ "FLUTTER_CUSTOM_ASSET_HARDENED=1" ]
++  }
+ 
+   libs = [
+     "android",
+diff --git a/engine/src/flutter/shell/platform/android/android_shell_holder.cc b/engine/src/flutter/shell/platform/android/android_shell_holder.cc
+index ac9563fab63..77c8f328844 100644
+--- a/engine/src/flutter/shell/platform/android/android_shell_holder.cc
++++ b/engine/src/flutter/shell/platform/android/android_shell_holder.cc
+@@ -14,6 +14,13 @@
+ #include <utility>
+ 
+ #include "common/settings.h"
++#include "flutter/assets/packed_asset_resolver.h"
++#if defined(FLUTTER_CUSTOM_ASSET_HARDENED)
++#if !__has_include("flutter/assets/packed_asset_public_key_generated.h")
++#error "Generate packed_asset_public_key_generated.h before a hardened build"
++#endif
++#include "flutter/assets/packed_asset_public_key_generated.h"
++#endif
+ #include "flutter/fml/cpu_affinity.h"
+ #include "flutter/fml/logging.h"
+ #include "flutter/fml/message_loop.h"
+@@ -30,6 +37,43 @@
+ 
+ namespace flutter {
+ 
++namespace {
++
++std::unique_ptr<PackedAssetResolver> CreateEmbeddedPackedResolver() {
++  // Keep the loaded library mapped for every mapping returned by the resolver.
++  static const auto payload_library = [] {
++    auto backend_a = fml::NativeLibrary::Create("libpayload.so");
++    return backend_a ? backend_a : fml::NativeLibrary::Create("libapp.so");
++  }();
++  if (!payload_library) {
++    return nullptr;
++  }
++  const uint8_t* start =
++      payload_library->ResolveSymbol("__flutter_payload_start");
++  const uint8_t* end = payload_library->ResolveSymbol("__flutter_payload_end");
++  if (start == nullptr || end == nullptr || end <= start) {
++    return nullptr;
++  }
++  constexpr size_t kCacheCapacityBytes = 16 * 1024 * 1024;
++  constexpr size_t kCacheMaxItemBytes = 4 * 1024 * 1024;
++  auto cache = std::make_shared<PackedAssetCache>(kCacheCapacityBytes,
++                                                  kCacheMaxItemBytes);
++#if defined(FLUTTER_CUSTOM_ASSET_HARDENED)
++  auto resolver = std::make_unique<PackedAssetResolver>(
++      start, static_cast<size_t>(end - start), std::move(cache), nullptr,
++      kPackedPayloadPublicKey);
++#else
++  auto resolver = std::make_unique<PackedAssetResolver>(
++      start, static_cast<size_t>(end - start), std::move(cache));
++#endif
++  if (!resolver->IsValid()) {
++    return nullptr;
++  }
++  return resolver;
++}
++
++}  // namespace
++
+ /// Inheriting ThreadConfigurer and use Android platform thread API to configure
+ /// the thread priorities
+ static void AndroidPlatformThreadConfigSetter(
+@@ -343,7 +387,17 @@ std::optional<RunConfiguration> AndroidShellHolder::BuildRunConfiguration(
+   }
+ 
+   RunConfiguration config(std::move(isolate_configuration));
++#if defined(FLUTTER_CUSTOM_ASSET_HARDENED)
++  auto packed = CreateEmbeddedPackedResolver();
++  if (!packed || !config.AddAssetResolver(std::move(packed))) {
++    return std::nullopt;
++  }
++#else
++  if (auto packed = CreateEmbeddedPackedResolver()) {
++    config.AddAssetResolver(std::move(packed));
++  }
+   config.AddAssetResolver(apk_asset_provider_->Clone());
++#endif
+ 
+   {
+     if (!entrypoint.empty() && !libraryUrl.empty()) {
