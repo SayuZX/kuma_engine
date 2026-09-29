@@ -7,6 +7,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PAYLOAD="${1:-$HERE/testdata/payload.bin}"
 OUT="${2:-$HERE/testdata/libpayload.so}"
+ABI="${3:-arm64-v8a}"
 
 TOOLCHAIN="$ENGINE_SRC/flutter/buildtools/mac-x64/clang/bin"
 CLANG="$TOOLCHAIN/clang"
@@ -15,17 +16,22 @@ NM="$TOOLCHAIN/llvm-nm"
 STRIP="$TOOLCHAIN/llvm-strip"
 NDK="$ENGINE_SRC/flutter/third_party/android_tools/sdk/ndk/28.2.13676358"
 SYSROOT="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/sysroot"
-TARGET="aarch64-linux-android24"
+case "$ABI" in
+  arm64-v8a) TARGET="aarch64-linux-android24"; MACHINE="AArch64" ;;
+  armeabi-v7a) TARGET="armv7a-linux-androideabi24"; MACHINE="ARM" ;;
+  *) echo "unsupported ABI: $ABI" >&2; exit 2 ;;
+esac
 
 if [[ ! -f "$PAYLOAD" ]]; then
   echo "payload not found: $PAYLOAD"
   exit 2
 fi
+mkdir -p "$(dirname "$OUT")"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-echo "==> assembling payload_section.S (arm64 ELF)"
+echo "==> assembling payload_section.S ($ABI ELF)"
 "$CLANG" --target="$TARGET" --sysroot="$SYSROOT" \
   -DPAYLOAD_FILE="\"$PAYLOAD\"" \
   -c "$HERE/payload_section.S" -o "$WORK/payload.o"
@@ -35,6 +41,8 @@ echo "==> linking libpayload.so"
   -Wl,-soname,libpayload.so \
   -Wl,--version-script,"$HERE/libpayload.ver" \
   -Wl,--gc-sections \
+  -Wl,-z,max-page-size=16384 \
+  -Wl,-z,common-page-size=16384 \
   -o "$OUT" "$WORK/payload.o"
 "$STRIP" --strip-unneeded "$OUT"
 
@@ -59,6 +67,11 @@ else
 fi
 
 echo "==> [4] machine + file type"
-"$READELF" -h "$OUT" | grep -E "Machine|Type:"
+ELF_HEADER="$("$READELF" -h "$OUT")"
+grep -E "Machine|Type:" <<< "$ELF_HEADER"
+grep -q "Machine:.*$MACHINE" <<< "$ELF_HEADER" || {
+  echo "FAIL wrong machine for $ABI" >&2
+  exit 1
+}
 
 echo "LIBPAYLOAD OK -> $OUT ($(stat -f '%z' "$OUT") bytes)"
