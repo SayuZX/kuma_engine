@@ -5,6 +5,8 @@ This is the app-specific Backend A workflow for `arm64-v8a` and
 checkout recorded in `engine_build_config.json`. The engine code in this
 repository is based on Flutter 3.27; a native build of that port is still
 unverified. Backend B remains an ARM64 experiment.
+The exact Flutter 3.47.5 integration patch and application instructions are
+in `custom-engine/engine_patch/flutter-3.47.5/`.
 
 ## Inputs and release command
 
