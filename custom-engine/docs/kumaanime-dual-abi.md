@@ -54,6 +54,10 @@ Gradle output directories, so a previous non-packed artifact cannot be
 mistaken for the new build. It replaces split APKs only after both candidates
 pass verification. The temporary stock APKs are build inputs, not release
 artifacts.
+On failure, the app wrapper restores the previous fully verified packed pair
+and its report, or removes temporary stock split APKs when there is no previous
+valid pair. This keeps a failed Flutter stage from leaving a stock APK under a
+release filename.
 
 The app wrapper enables `--split-debug-info` and creates a unique host
 directory under `~/.local/state/kumaanime/release-symbols/`; set
