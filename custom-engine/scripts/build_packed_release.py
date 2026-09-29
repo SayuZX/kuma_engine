@@ -174,9 +174,17 @@ def _build(args: argparse.Namespace) -> None:
              "--output", generated_header)
         if generated_header.read_bytes() != header.read_bytes():
             raise ValueError("public key differs from the custom engine header")
+        out_overrides = {
+            "arm64-v8a": args.arm64_engine_out,
+            "armeabi-v7a": args.armv7_engine_out,
+        }
+        engine_outputs = {
+            abi: out_overrides[abi] or out for abi, (out, _) in ABIS.items()
+        }
         engines = {
-            abi: _engine_ready(engine_src / "out" / out, cpu, generated_header.read_bytes())
-            for abi, (out, cpu) in ABIS.items()
+            abi: _engine_ready(engine_src / "out" / engine_outputs[abi],
+                               cpu, generated_header.read_bytes())
+            for abi, (_, cpu) in ABIS.items()
         }
 
         if not args.skip_flutter_build:
@@ -210,6 +218,7 @@ def _build(args: argparse.Namespace) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         signed_outputs = {}
         report = {"asset_count": len(asset_names),
+                  "engine_output_dirs": engine_outputs,
                   "signed_payload_bytes": signed_payload.stat().st_size,
                   "payload_sha256": _sha256(signed_payload), "apks": {}}
         sign_env = os.environ.copy()
@@ -292,6 +301,8 @@ def main() -> None:
     parser.add_argument("--flutter-root", required=True, type=Path)
     parser.add_argument("--engine-src", type=Path,
                         help="engine checkout root (defaults to <flutter-root>/engine/src)")
+    parser.add_argument("--arm64-engine-out", help="ARM64 GN output name")
+    parser.add_argument("--armv7-engine-out", help="ARMv7 GN output name")
     parser.add_argument("--key-dir", type=Path, default=Path("~/.config/kuma-engine"))
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--skip-flutter-build", action="store_true")
