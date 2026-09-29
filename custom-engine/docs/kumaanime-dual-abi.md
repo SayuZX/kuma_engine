@@ -24,7 +24,7 @@ checksum-checked removal of the two unused Dolby files are reproducible with:
 bash custom-engine/app_patch/apply_kumaanime.sh /path/to/KumaAnime-App
 ```
 
-The patch is anchored to the inspected app files and refuses changed context.
+The patch requires the inspected target lines and refuses changed Dolby bytes.
 It contains no proprietary APK bytes or signing secrets. From the KumaNime
 app checkout afterward:
 
@@ -135,6 +135,24 @@ linking are the next measurements; no unsafe subsystem deletion is assumed.
 | arm64-v8a | 11,747,864 B | 13,259,584 B | +1,511,720 B |
 | armeabi-v7a | 8,615,900 B | 8,970,996 B | +355,096 B |
 
+The 35-asset corpus was also compressed independently per asset on the macOS
+host, applying the current auto rule (skip known internally compressed file
+types; accept a candidate only if it saves at least 64 bytes and 5%). These
+figures exclude index, signatures and alignment bytes:
+
+| Codec | Stored asset bytes | Difference from zlib |
+| --- | ---: | ---: |
+| None | 14,646,392 | +3,683,915 |
+| zlib level 6 | 10,962,477 | baseline |
+| zstd level 3 | 10,819,681 | -142,796 |
+| LZ4 default | 11,672,352 | +709,875 |
+
+The CLI comparison used Zstandard 1.5.7 and LZ4 1.10.0. It measures size,
+not Android decoder latency or binary dependency cost. Zstandard's gain is
+too small to cover the current engine-size gap on its own; the runtime
+therefore remains on the already tested zlib codec rather than adding another
+decoder without a measured overall win.
+
 ## Security and compatibility limits
 
 The hashed index contains no plaintext asset-name table. The AOT application
@@ -144,9 +162,13 @@ The existing strict `verify_release_apk.sh` rejects those literals; this
 app-specific Python gate reports their count and accepts them because the
 Flutter `Image.asset` / `rootBundle` API still passes string keys. This is an
 explicit exception to the strict gate, not proof of hidden application strings.
+Flutter's required `AssetManifest.bin` and font manifest can also reveal
+logical names after decoding, even though their stored bytes are packed.
 An offline client cannot keep its decryption/signing logic secret from a
 determined reverse engineer. The private signing key is build-only; the
-runtime embeds only the public key.
+runtime embeds only the public key. This APK workflow authenticates payloads
+but does not enable the optional AEAD encryption module, so it makes no
+confidentiality claim.
 
 Backend A adds `libpayload.so`. The two-library final APK target requires a
 separate, device-verified Backend B link for each ABI and has not been reached
