@@ -88,6 +88,26 @@ def _sha1(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _size_breakdown(apk: Path, abi: str) -> dict[str, int]:
+    with ZipFile(apk) as archive:
+        infos = {info.filename: info for info in archive.infolist()}
+        return {
+            "flutter_assets_zip_bytes": sum(
+                info.compress_size for name, info in infos.items()
+                if name.startswith("assets/flutter_assets/")
+            ),
+            "dolby_apks_zip_bytes": sum(
+                info.compress_size for name, info in infos.items()
+                if name.startswith("assets/dolby/") and name.endswith(".apk")
+            ),
+            **{
+                f"{library}_bytes": infos.get(f"lib/{abi}/{library}.so").file_size
+                if f"lib/{abi}/{library}.so" in infos else 0
+                for library in ("libapp", "libflutter", "libpayload")
+            },
+        }
+
+
 def _properties(path: Path) -> dict[str, str]:
     result = {}
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -232,6 +252,8 @@ def _build(args: argparse.Namespace) -> None:
                 "saving_bytes": source.stat().st_size - destination.stat().st_size,
                 "sha256": _sha256(destination),
                 "dart_plaintext_path_count": inspected["dart_plaintext_path_count"],
+                "source_components": _size_breakdown(source, abi),
+                "packed_components": _size_breakdown(destination, abi),
             }
 
         report_json = json.dumps(report, indent=2, sort_keys=True) + "\n"
