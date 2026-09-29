@@ -41,6 +41,8 @@ def inspect_archive(apk: Path, abi: str) -> None:
             raise ValueError("assets/flutter_assets/ remains in APK")
         if any(name.startswith("assets/dolby/") for name in names):
             raise ValueError("assets/dolby/ remains in APK")
+        if any(name.endswith(".symbols") for name in names):
+            raise ValueError("Dart symbol archive remains in APK")
         actual_abis = _native_abis(names)
         if actual_abis != {abi}:
             raise ValueError(f"APK ABI mismatch: expected {abi}, got {sorted(actual_abis)}")

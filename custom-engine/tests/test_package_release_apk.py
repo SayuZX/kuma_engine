@@ -65,6 +65,16 @@ class PackageReleaseApkTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "flutter_assets"):
             inspect_archive(self.source, "arm64-v8a")
 
+    def test_inspection_rejects_dart_symbol_archive(self):
+        self._stock_apk()
+        rewrite_unsigned_apk(
+            self.source, self.rewritten, "arm64-v8a", self.engine, self.payload
+        )
+        with ZipFile(self.rewritten, "a") as archive:
+            archive.writestr("app.android-arm64.symbols", b"private symbols")
+        with self.assertRaisesRegex(ValueError, "symbol archive"):
+            inspect_archive(self.rewritten, "arm64-v8a")
+
     def test_rejects_path_traversal_in_input_apk(self):
         self._stock_apk()
         with ZipFile(self.source, "a") as archive:
