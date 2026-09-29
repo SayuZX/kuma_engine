@@ -8,101 +8,45 @@ unverified. Backend B remains an ARM64 experiment.
 The exact Flutter 3.47.5 integration patch and application instructions are
 in `custom-engine/engine_patch/flutter-3.47.5/`.
 
-## Inputs and release command
+## Direct release build
 
-The app checkout must have an Android release signing configuration in
-`android/key.properties`. Keep the Ed25519 private payload key outside both
-repositories at `~/.config/kuma-engine/payload-private.ed25519` (mode 0600);
-the matching public key is in `custom-engine/keys/`. Generate
-`flutter/assets/packed_asset_public_key_generated.h` from this public key and
-relink **both** hardened release engines before packaging. Both `args.gn`
-files must set `flutter_custom_asset_hardened = true` and target the correct
-CPU. The script rejects a library older than the generated public header.
+The Flutter 3.47.5 integration patch adds `PackedFlutterAssets.kt` to the
+Flutter Gradle plugin. KumaNime enables it with
+`flutter.customPackedAssets=true` in `android/gradle.properties`. The app has
+no custom APK postprocessor or packaging task. Build normally:
 
-For the inspected KumaNime app revision, the app-specific text edits and
-checksum-checked removal of the two unused Dolby files are reproducible with:
+```bash
+flutter build apk --release
+```
+
+This produces `build/app/outputs/flutter-apk/app-release.apk` with ARM64 and
+ARMv7. Flutter's release compile task supplies the exact `flutter_assets`
+input. The plugin invokes the Dart packer, native Ed25519 signer, and ELF
+linker before Android packages the APK; it stages the hardened `libflutter.so`
+and `libpayload.so` for both ABIs. The normal Android Gradle release signing
+step signs the APK. The plugin omits `flutter_assets` from the asset-copy task
+and fails `assembleRelease` if unpacked Flutter assets, Dolby APKs, or an
+unexpected ABI remain. No Python process runs in this build path.
+
+Prerequisites are the two LTO hardened engine outputs
+`engine/src/out/android_release_lto` and
+`engine/src/out/android_release_arm64_lto`, the matching public key embedded
+in each engine, the offline private key at
+`~/.config/kuma-engine/payload-private.ed25519`, and the app's
+`android/key.properties`. The private key and release keystore stay outside
+this repository. The plugin checks the key header and engine GN arguments
+before packaging.
+
+For the inspected app revision, apply the app configuration patch and remove
+the two unused Dolby APKs with:
 
 ```bash
 bash custom-engine/app_patch/apply_kumaanime.sh /path/to/KumaAnime-App
 ```
 
-The patch requires the inspected target lines and refuses changed Dolby bytes.
-It contains no proprietary APK bytes or signing secrets. From the KumaNime
-app checkout afterward:
-
-```bash
-flutter pub get
-bash tool/build_packed_release.sh -v
-```
-
-The wrapper runs `build_packed_release.py --replace-standard`. A direct
-`flutter build apk --release` in the app is guarded at `preReleaseBuild` and
-fails: an ordinary Flutter build would package `assets/flutter_assets/`.
-The PowerShell release wrapper must also fail until a Windows-host engine
-pipeline exists. Remove the two inert Dolby APKs from
-`android/app/src/main/assets/dolby/`; the app's native Audio FX code does not
-consume them. Keep the sealed emoji font payload because the app loads it.
-
-The final outputs are:
-
-```text
-build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-build/app/outputs/packed-release-report.json
-```
-
-The wrapper deletes a stale universal `app-release.apk` in both Flutter and
-Gradle output directories, so a previous non-packed artifact cannot be
-mistaken for the new build. It replaces split APKs only after both candidates
-pass verification. The temporary stock APKs are build inputs, not release
-artifacts.
-On failure, the app wrapper restores the previous fully verified packed pair
-and its report, or removes temporary stock split APKs when there is no previous
-valid pair. This keeps a failed Flutter stage from leaving a stock APK under a
-release filename.
-
-The app wrapper enables `--split-debug-info` and creates a unique host
-directory under `~/.local/state/kumaanime/release-symbols/`; set
-`KUMA_SYMBOL_ROOT` to choose another persistent location. Keep that directory
-and the SHA-256 values in `packed-release-report.json` for crash
-symbolication; do not put `.symbols` files in the APK. The optional
-`--obfuscate` switch requires `--split-debug-info`. It is not enabled for
-KumaNime because call sites use
-`runtimeType` in cache keys and behavior has not been device-tested with
-obfuscation. Symbol splitting alone does not rename those identifiers.
-
-For a packaging-only repeat with already built split APKs:
-
-```bash
-python3 custom-engine/scripts/build_packed_release.py \
-  --app /path/to/KumaAnime-App \
-  --flutter-root /path/to/flutter \
-  --engine-src /path/to/flutter/engine/src \
-  --output-dir /tmp/kuma-packed-output \
-  --skip-flutter-build
-```
-
-After a release build, run the same two-APK gate independently in CI:
-
-```bash
-python3 custom-engine/scripts/verify_packed_pair.py \
-  --app /path/to/KumaAnime-App \
-  --engine-src /path/to/flutter/engine/src
-```
-
-The build wrapper also runs this pair gate before writing its final report.
-It rejects a stale universal APK and rejects differing payloads between ABIs.
-
-The packer extracts the *exact* final Flutter assets from both stock APKs,
-rejects ABI drift, packs them once, signs format v3, and links the same
-payload bytes into each ABI's `libpayload.so`. It replaces `libflutter.so`
-with the matching hardened library, omits Flutter assets and Dolby source
-assets, aligns native libraries at 16 KiB, signs each APK with the app release
-key, and reopens each archive for checks. The gate verifies ZIP contents,
-ABI/ELF machine, APK signature, alignment, native debug sections, payload
-section and symbols, the Ed25519 index signature, and every stored block
-digest. It rejects plaintext asset paths in `libpayload.so` and
-`libflutter.so`.
+The patch only adds the Gradle opt-in and updates release instructions; the
+asset pipeline itself lives in Flutter tooling. The historical comparison
+below measured an earlier split-APK driver and is retained as benchmark data.
 
 ## Measured prototype, 29 September 2026
 
@@ -190,12 +134,15 @@ level 6. The current auto rule stays at the Dart zlib default level 6.
 The hashed index contains no plaintext asset-name table. The AOT application
 library still contains 20 asset-path literals compiled from Dart call sites in
 this prototype.
-The existing strict `verify_release_apk.sh` rejects those literals; this
-app-specific Python gate reports their count and accepts them because the
-Flutter `Image.asset` / `rootBundle` API still passes string keys. This is an
-explicit exception to the strict gate, not proof of hidden application strings.
+The existing strict `verify_release_apk.sh` rejects those literals; the
+direct Flutter Gradle integration checks package contents and ABI coverage
+but does not claim to remove literals compiled from Dart call sites. Flutter
+`Image.asset` / `rootBundle` still passes string keys.
 Flutter's required `AssetManifest.bin` and font manifest can also reveal
 logical names after decoding, even though their stored bytes are packed.
+The app's Gradle `versionCode` and `versionName` currently use wall-clock
+values, so byte-for-byte APK reproducibility is not claimed; the packed asset
+format and payload generation remain deterministic for identical inputs.
 An offline client cannot keep its decryption/signing logic secret from a
 determined reverse engineer. The private signing key is build-only; the
 runtime embeds only the public key. This APK workflow authenticates payloads
