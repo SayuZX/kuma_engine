@@ -22,4 +22,8 @@ for ABI in arm64-v8a armeabi-v7a; do
   esac
   "$TOOLCHAIN/llvm-readelf" --dyn-syms "$OUT" | rg '__flutter_payload_start'
   "$TOOLCHAIN/llvm-readelf" --dyn-syms "$OUT" | rg '__flutter_payload_end'
+  if "$TOOLCHAIN/llvm-readelf" -S "$OUT" | rg '\.symtab|\.debug_info'; then
+    echo "unstripped native payload library: $ABI" >&2
+    exit 1
+  fi
 done

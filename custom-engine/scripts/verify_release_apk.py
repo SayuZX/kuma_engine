@@ -66,10 +66,12 @@ def verify(apk: Path, engine_src: Path, public_key: Path,
                 if not re.search(rf"Machine:\s+{MACHINE[abi]}\b", header):
                     raise ValueError(f"wrong ELF machine: {library}")
 
-            for library in ("libflutter.so", "libapp.so"):
+            for library in ("libflutter.so", "libapp.so", "libpayload.so"):
                 sections = _run(llvm / "llvm-readelf", "-S", temp / library)
                 if ".debug_info" in sections:
                     raise ValueError(f"debug information remains in {library}")
+                if ".symtab" in sections:
+                    raise ValueError(f"static symbol table remains in {library}")
             symbols = _run(llvm / "llvm-readelf", "--dyn-syms", temp / "libpayload.so")
             if "__flutter_payload_start" not in symbols or "__flutter_payload_end" not in symbols:
                 raise ValueError("native payload linker symbols missing")
