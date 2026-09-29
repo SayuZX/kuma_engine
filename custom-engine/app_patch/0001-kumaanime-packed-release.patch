@@ -14,7 +14,7 @@
 @@ -41 +41 @@
 -flutter build apk --release
 +bash tool/build_packed_release.sh -v
-@@ -44,2 +44,9 @@
+@@ -44,2 +44,13 @@
 -The compiled APK will be located at:
 -`build/app/outputs/flutter-apk/app-release.apk`
 +The build requires both hardened custom-engine libraries, the matching offline
@@ -24,8 +24,12 @@
 +each APK, and verifies the final archives. Outputs are
 +`build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` and
 +`build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk`. The size and hash
-+report is `build/app/outputs/packed-release-report.json`. Direct
-+`flutter build apk --release` is blocked so it cannot ship `flutter_assets`.
++report is `build/app/outputs/packed-release-report.json`. Dart AOT stack
++symbols are saved outside the APK in a unique directory under
++`~/.local/state/kumaanime/release-symbols/` (override with
++`KUMA_SYMBOL_ROOT`). Preserve that directory and its SHA-256 hashes from the
++report for crash symbolication. Direct `flutter build apk --release` is blocked
++so it cannot ship `flutter_assets`.
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
 @@ -17 +17 @@
@@ -145,7 +149,7 @@
 +throw "Packed release requires the macOS custom Flutter Engine for both ARM64 and ARMv7. Run tool/build_packed_release.sh on the configured macOS host; direct Flutter release builds are blocked."
 --- /dev/null
 +++ b/tool/build_packed_release.sh
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,33 @@
 +#!/usr/bin/env bash
 +set -euo pipefail
 +
@@ -166,10 +170,16 @@
 +export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dorg.gradle.daemon=false \"-Dorg.gradle.jvmargs=-Xmx3G -XX:MaxMetaspaceSize=1G -XX:ReservedCodeCacheSize=256m -XX:ActiveProcessorCount=2\""
 +ARGS=()
 +if [[ $# -eq 1 ]]; then ARGS+=(--verbose); fi
++# Keep a unique symbol archive outside the app checkout and APK for crash reports.
++SYMBOL_ROOT="${KUMA_SYMBOL_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/kumaanime/release-symbols}"
++mkdir -p "$SYMBOL_ROOT"
++SYMBOL_DIR="$(mktemp -d "$SYMBOL_ROOT/packed-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXXXX")"
++echo "Dart AOT symbols: $SYMBOL_DIR"
 +WORK="$(mktemp -d)"
 +trap 'rm -rf "$WORK"' EXIT
 +KUMA_PACKED_STAGING=1 python3 "$PACKER" \
 +  --app "$APP_ROOT" \
 +  --flutter-root "$SDK_ROOT" \
++  --split-debug-info "$SYMBOL_DIR" \
 +  --output-dir "$WORK" \
 +  --replace-standard "${ARGS[@]}"
