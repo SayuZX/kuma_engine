@@ -55,11 +55,13 @@ mistaken for the new build. It replaces split APKs only after both candidates
 pass verification. The temporary stock APKs are build inputs, not release
 artifacts.
 
-The build pipeline accepts `--split-debug-info <directory>` to move Dart AOT
-stack symbols out of the APK. Keep that directory and the SHA-256 values in
-`packed-release-report.json` for crash symbolication; do not put `.symbols`
-files in the APK. `--obfuscate` is an optional, separate switch and requires
-`--split-debug-info`. It is not enabled for KumaNime because call sites use
+The app wrapper enables `--split-debug-info` and creates a unique host
+directory under `~/.local/state/kumaanime/release-symbols/`; set
+`KUMA_SYMBOL_ROOT` to choose another persistent location. Keep that directory
+and the SHA-256 values in `packed-release-report.json` for crash
+symbolication; do not put `.symbols` files in the APK. The optional
+`--obfuscate` switch requires `--split-debug-info`. It is not enabled for
+KumaNime because call sites use
 `runtimeType` in cache keys and behavior has not been device-tested with
 obfuscation. Symbol splitting alone does not rename those identifiers.
 
@@ -174,6 +176,8 @@ not Android decoder latency or binary dependency cost. Zstandard's gain is
 too small to cover the current engine-size gap on its own; the runtime
 therefore remains on the already tested zlib codec rather than adding another
 decoder without a measured overall win.
+On the same corpus, zlib level 9 stored 10,951,040 B, only 11,437 B less than
+level 6. The current auto rule stays at the Dart zlib default level 6.
 
 ## Security and compatibility limits
 
