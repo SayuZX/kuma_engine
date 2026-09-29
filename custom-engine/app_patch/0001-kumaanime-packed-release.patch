@@ -9,29 +9,19 @@
 +- Flutter 3.47.5 at framework commit `6a19cca56475dbfba1478ee68d7bd0c2ef891da1` for the packed Android release; its custom engine must be built from the matching checkout.
 @@ -37 +36,2 @@
 -To build a release APK, follow these commands:
-+To build signed Android release APKs for ARM64 and ARMv7 with the custom
-+packed-asset engine, use:
-@@ -41 +41 @@
--flutter build apk --release
-+bash tool/build_packed_release.sh -v
-@@ -44,2 +44,15 @@
++To build the signed Android release APK with the custom packed-asset engine
++for ARM64 and ARMv7, use the normal Flutter command:
+@@ -44,2 +44,8 @@
 -The compiled APK will be located at:
 -`build/app/outputs/flutter-apk/app-release.apk`
 +The build requires both hardened custom-engine libraries, the matching offline
-+Ed25519 signing key outside this repository, and `android/key.properties`. It
-+packs the exact Flutter assets from the two split AOT APKs, embeds one signed
-+payload in `libpayload.so` per ABI, replaces `libflutter.so`, aligns and signs
-+each APK, and verifies the final archives. Outputs are
-+`build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` and
-+`build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk`. The size and hash
-+report is `build/app/outputs/packed-release-report.json`. Dart AOT stack
-+symbols are saved outside the APK in a unique directory under
-+`~/.local/state/kumaanime/release-symbols/` (override with
-+`KUMA_SYMBOL_ROOT`). Preserve that directory and its SHA-256 hashes from the
-+report for crash symbolication. If the packed build fails, the wrapper
-+restores the previous verified APK pair or removes temporary stock release
-+outputs. Direct `flutter build apk --release` is blocked so it cannot ship
-+`flutter_assets`.
++Ed25519 signing key outside this repository, and `android/key.properties`.
++Gradle invokes the Dart packer and native signer after Flutter compiles the
++release assets, links the signed payload into `libpayload.so` for both ABIs,
++stages the custom `libflutter.so`, and excludes `flutter_assets` from the APK.
++Android's normal release packaging signs the output at
++`build/app/outputs/flutter-apk/app-release.apk`. The build fails if the final
++APK contains unpacked Flutter assets or an unexpected ABI.
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
 @@ -17 +17 @@
@@ -80,29 +70,14 @@
 -and privileged system integration. Bundling these APKs alone provides no
 -Dolby processing or system privileges on an ordinary unrooted Android app.
 +Laboratories, Inc.; "Sony" is a trademark of Sony Group Corporation.
---- a/android/app/build.gradle
-+++ b/android/app/build.gradle
-@@ -138,0 +139,17 @@
-+}
+--- a/android/gradle.properties
++++ b/android/gradle.properties
+@@ -4,0 +5,2 @@
 +
-+// Release APKs require the signed payload packaging step. A direct Flutter
-+// release build would silently ship assets/flutter_assets/ again.
-+tasks.register("kumaRequirePackedRelease") {
-+    group = "verification"
-+    doLast {
-+        if (System.getenv("KUMA_PACKED_STAGING") != "1") {
-+            throw new GradleException(
-+                "Direct release APK builds are disabled. Run tool/build_packed_release.sh " +
-+                "to build, pack, sign and verify ARM64 and ARMv7 APKs."
-+            )
-+        }
-+    }
-+}
-+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
-+    dependsOn("kumaRequirePackedRelease")
++flutter.customPackedAssets=true
 --- a/tool/build_release_hidden_assets.sh
 +++ b/tool/build_release_hidden_assets.sh
-@@ -2,17 +2,2 @@
+@@ -2,17 +2,3 @@
 -set -e
 -ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 -cd "$ROOT"
@@ -121,10 +96,11 @@
 -echo "  unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -iE 'flutter_assets|keys.json|owner.jpg|.kuma|broken_heart|chisato|search.png' | head -n 30"
 -echo "Expected: only lib/assets/images/fluent_{min,max,close}.svg + fonts in flutter_assets/"
 +set -euo pipefail
-+exec "$(cd "$(dirname "$0")" && pwd)/build_packed_release.sh" "$@"
++cd "$(dirname "$0")/.."
++exec flutter build apk --release "$@"
 --- a/tool/build_release_hidden_assets.ps1
 +++ b/tool/build_release_hidden_assets.ps1
-@@ -1,4 +0,0 @@
+@@ -1,4 +1,0 @@
 -param(
 -  [Parameter(ValueFromRemainingArguments=$true)]
 -  [string[]]$ExtraArgs
@@ -148,89 +124,4 @@
 -Write-Host ""
 -Write-Host "Check: Jar -tf build/app/outputs/flutter-apk/app-release.apk | Select-String 'flutter_assets|keys.json|owner.jpg'"
 -Write-Host "Expected: only lib/assets/images/fluent_{min,max,close}.svg + fonts in flutter_assets/"
-+throw "Packed release requires the macOS custom Flutter Engine for both ARM64 and ARMv7. Run tool/build_packed_release.sh on the configured macOS host; direct Flutter release builds are blocked."
---- /dev/null
-+++ b/tool/build_packed_release.sh
-@@ -0,0 +1,82 @@
-+#!/usr/bin/env bash
-+set -euo pipefail
-+
-+APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-+SDK_ROOT="${FLUTTER_ROOT:-$(sed -n 's/^flutter.sdk=//p' "$APP_ROOT/android/local.properties")}"
-+PACKER="$SDK_ROOT/custom-engine/scripts/build_packed_release.py"
-+
-+if [[ ! -f "$PACKER" ]]; then
-+  echo "Custom engine packer missing: $PACKER" >&2
-+  exit 2
-+fi
-+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "-v" && "$1" != "--verbose" ) ]]; then
-+  echo "usage: tool/build_packed_release.sh [-v]" >&2
-+  exit 2
-+fi
-+
-+# Keep Gradle within a predictable memory budget on the macOS build host.
-+export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dorg.gradle.daemon=false \"-Dorg.gradle.jvmargs=-Xmx3G -XX:MaxMetaspaceSize=1G -XX:ReservedCodeCacheSize=256m -XX:ActiveProcessorCount=2\""
-+ARGS=()
-+if [[ $# -eq 1 ]]; then ARGS+=(--verbose); fi
-+# Keep a unique symbol archive outside the app checkout and APK for crash reports.
-+SYMBOL_ROOT="${KUMA_SYMBOL_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/kumaanime/release-symbols}"
-+mkdir -p "$SYMBOL_ROOT"
-+SYMBOL_DIR="$(mktemp -d "$SYMBOL_ROOT/packed-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXXXX")"
-+echo "Dart AOT symbols: $SYMBOL_DIR"
-+WORK="$(mktemp -d)"
-+FLUTTER_APK_DIR="$APP_ROOT/build/app/outputs/flutter-apk"
-+GRADLE_APK_DIR="$APP_ROOT/build/app/outputs/apk/release"
-+REPORT="$APP_ROOT/build/app/outputs/packed-release-report.json"
-+PREVIOUS="$WORK/previous"
-+HAVE_PREVIOUS=0
-+BUILD_OK=0
-+PAIR_VERIFIER="$SDK_ROOT/custom-engine/scripts/verify_packed_pair.py"
-+if [[ -f "$FLUTTER_APK_DIR/app-arm64-v8a-release.apk" &&
-+      -f "$FLUTTER_APK_DIR/app-armeabi-v7a-release.apk" ]] &&
-+   python3 "$PAIR_VERIFIER" --app "$APP_ROOT" \
-+     --engine-src "$SDK_ROOT/engine/src" >/dev/null 2>&1; then
-+  mkdir -p "$PREVIOUS"
-+  cp "$FLUTTER_APK_DIR/app-arm64-v8a-release.apk" "$PREVIOUS/"
-+  cp "$FLUTTER_APK_DIR/app-armeabi-v7a-release.apk" "$PREVIOUS/"
-+  if [[ -f "$REPORT" ]]; then cp "$REPORT" "$PREVIOUS/report.json"; fi
-+  HAVE_PREVIOUS=1
-+fi
-+restore_on_exit() {
-+  local rc=$?
-+  set +e
-+  if [[ "$BUILD_OK" -ne 1 ]]; then
-+    for abi in arm64-v8a armeabi-v7a; do
-+      local apk="app-${abi}-release.apk"
-+      if [[ "$HAVE_PREVIOUS" -eq 1 ]]; then
-+        mkdir -p "$FLUTTER_APK_DIR" "$GRADLE_APK_DIR"
-+        cp "$PREVIOUS/$apk" "$FLUTTER_APK_DIR/$apk"
-+        cp "$PREVIOUS/$apk" "$GRADLE_APK_DIR/$apk"
-+        shasum -a 1 "$FLUTTER_APK_DIR/$apk" | cut -d' ' -f1 > "$FLUTTER_APK_DIR/$apk.sha1"
-+      else
-+        rm -f "$FLUTTER_APK_DIR/$apk" "$FLUTTER_APK_DIR/$apk.sha1" \
-+          "$GRADLE_APK_DIR/$apk"
-+      fi
-+    done
-+    if [[ -f "$PREVIOUS/report.json" ]]; then
-+      cp "$PREVIOUS/report.json" "$REPORT"
-+    else
-+      rm -f "$REPORT"
-+    fi
-+    rm -f "$FLUTTER_APK_DIR/app-release.apk" \
-+      "$FLUTTER_APK_DIR/app-release.apk.sha1" \
-+      "$GRADLE_APK_DIR/app-release.apk"
-+    echo "Packed release failed; previous verified APK pair restored or stock APKs removed." >&2
-+  fi
-+  rm -rf "$WORK"
-+  exit "$rc"
-+}
-+trap restore_on_exit EXIT
-+trap 'exit 130' INT
-+trap 'exit 143' TERM
-+KUMA_PACKED_STAGING=1 python3 "$PACKER" \
-+  --app "$APP_ROOT" \
-+  --flutter-root "$SDK_ROOT" \
-+  --split-debug-info "$SYMBOL_DIR" \
-+  --output-dir "$WORK" \
-+  --replace-standard "${ARGS[@]}"
-+BUILD_OK=1
++throw "Packed Android release currently requires the macOS custom Flutter Engine for ARM64 and ARMv7. Build on that host with flutter build apk --release."

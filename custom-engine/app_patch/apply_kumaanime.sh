@@ -25,9 +25,9 @@ check_dolby DolbySound.apk 7985f0cbc3909629b1e5afd744b2720f8c0ed52d796ceb3da2e9d
 check_dolby daxService.apk 510cba072e830baf0a39ddb585998cb81b8164b8ec4bc06c9a8e1d00f9f9b340
 patch --dry-run -p1 -d "$APP_DIR" < "$PATCH"
 patch -p1 -d "$APP_DIR" < "$PATCH"
-chmod +x "$APP_DIR/tool/build_packed_release.sh" "$APP_DIR/tool/build_release_hidden_assets.sh"
+chmod +x "$APP_DIR/tool/build_release_hidden_assets.sh"
 for name in DolbySound.apk daxService.apk; do
   path="$APP_DIR/android/app/src/main/assets/dolby/$name"
   [[ ! -f "$path" ]] || rm -- "$path"
 done
-echo "KumaAnime packed-release integration applied; build with tool/build_packed_release.sh"
+echo "KumaAnime packed-release integration applied; build with flutter build apk --release"
