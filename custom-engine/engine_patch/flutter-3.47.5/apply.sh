@@ -44,6 +44,16 @@ done
   echo "Refusing to replace an existing test fixture" >&2
   exit 2
 }
+PLUGIN_TARGET="$FLUTTER_ROOT/packages/flutter_tools/gradle/src/main/kotlin/PackedFlutterAssets.kt"
+[[ ! -e "$PLUGIN_TARGET" ]] || {
+  echo "Refusing to replace existing Flutter Gradle integration: $PLUGIN_TARGET" >&2
+  exit 2
+}
+TOOLS_TARGET="$FLUTTER_ROOT/custom-engine"
+if [[ -e "$TOOLS_TARGET" && ! "$REPO_ROOT/custom-engine" -ef "$TOOLS_TARGET" ]]; then
+  echo "Refusing to replace existing Flutter SDK custom-engine tools: $TOOLS_TARGET" >&2
+  exit 2
+fi
 
 git -C "$FLUTTER_ROOT" apply "$HERE/integration.patch"
 for source in "${SOURCES[@]}"; do
@@ -56,6 +66,12 @@ done
 mkdir -p "$TARGET/testdata"
 cp "$REPO_ROOT/assets/testdata/packed_payload_fixture.bin" \
   "$TARGET/testdata/packed_payload_fixture.bin"
+cp "$HERE/PackedFlutterAssets.kt" "$PLUGIN_TARGET"
+if [[ ! "$REPO_ROOT/custom-engine" -ef "$TOOLS_TARGET" ]]; then
+  mkdir -p "$TOOLS_TARGET"
+  cp -R "$REPO_ROOT/custom-engine/asset_packer" "$TOOLS_TARGET/"
+  cp -R "$REPO_ROOT/custom-engine/linker" "$TOOLS_TARGET/"
+fi
 
 python3 - "$REPO_ROOT/custom-engine/keys/payload-public.ed25519" \
   "$TARGET/packed_asset_public_key_generated.h" <<'PY'

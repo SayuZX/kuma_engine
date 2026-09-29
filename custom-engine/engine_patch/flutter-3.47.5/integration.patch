@@ -253,3 +253,27 @@ index ac9563fab63..77c8f328844 100644
  
    {
      if (!entrypoint.empty() && !libraryUrl.empty()) {
+diff --git a/packages/flutter_tools/gradle/src/main/kotlin/FlutterPlugin.kt b/packages/flutter_tools/gradle/src/main/kotlin/FlutterPlugin.kt
+index 806fc5097a0..b965d1dfc21 100644
+--- a/packages/flutter_tools/gradle/src/main/kotlin/FlutterPlugin.kt
++++ b/packages/flutter_tools/gradle/src/main/kotlin/FlutterPlugin.kt
+@@ -350,6 +350,9 @@ class FlutterPlugin : Plugin<Project> {
+         if (FlutterPluginUtils.isFlutterAppProject(projectToAddTasksTo)) {
+             val appExtension = FlutterPluginUtils.getAndroidApplicationExtension(projectToAddTasksTo)
+             configureAbis(projectToAddTasksTo, appExtension)
++            if (PackedFlutterAssets.enabled(projectToAddTasksTo)) {
++                PackedFlutterAssets.configure(projectToAddTasksTo, flutterRoot!!, appExtension)
++            }
+             val android: AbstractAppExtension =
+                 projectToAddTasksTo.extensions.findByName("android") as AbstractAppExtension
+             android.applicationVariants.configureEach {
+@@ -750,6 +753,9 @@ class FlutterPlugin : Plugin<Project> {
+                 ) {
+                     dependsOn(flutterCompileTask)
+                     with(flutterCompileTask.assets)
++                    if (variantBuildMode == "release" && PackedFlutterAssets.enabled(project)) {
++                        exclude("flutter_assets/**")
++                    }
+                     filePermissions {
+                         user {
+                             read = true
