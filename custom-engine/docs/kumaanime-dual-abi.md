@@ -55,6 +55,14 @@ mistaken for the new build. It replaces split APKs only after both candidates
 pass verification. The temporary stock APKs are build inputs, not release
 artifacts.
 
+The build pipeline accepts `--split-debug-info <directory>` to move Dart AOT
+stack symbols out of the APK. Keep that directory and the SHA-256 values in
+`packed-release-report.json` for crash symbolication; do not put `.symbols`
+files in the APK. `--obfuscate` is an optional, separate switch and requires
+`--split-debug-info`. It is not enabled for KumaNime because call sites use
+`runtimeType` in cache keys and behavior has not been device-tested with
+obfuscation. Symbol splitting alone does not rename those identifiers.
+
 For a packaging-only repeat with already built split APKs:
 
 ```bash
@@ -134,6 +142,20 @@ linking are the next measurements; no unsafe subsystem deletion is assumed.
 | --- | ---: | ---: | ---: |
 | arm64-v8a | 11,747,864 B | 13,259,584 B | +1,511,720 B |
 | armeabi-v7a | 8,615,900 B | 8,970,996 B | +355,096 B |
+
+With Dart AOT symbols moved to host files, a fresh build of the same app
+source measured:
+
+| ABI | Stock APK with split symbols | Packed APK with split symbols | Packing overhead | `libapp.so` reduction vs unsplit |
+| --- | ---: | ---: | ---: | ---: |
+| arm64-v8a | 62,883,599 B | 64,528,219 B | 1,644,620 B | 2,424,832 B |
+| armeabi-v7a | 55,966,599 B | 56,467,305 B | 500,706 B | 2,981,888 B |
+
+The two symbol files are 8,248,560 B (ARM64) and 7,156,972 B (ARMv7) on
+the build host. Their retention is required to decode production AOT stacks.
+Both packed APKs passed the pair gate after the native `.symtab` rejection was
+added. Splitting Dart symbols saves APK bytes in both stock and packed builds;
+it does not erase the custom engine's packing overhead.
 
 The 35-asset corpus was also compressed independently per asset on the macOS
 host, applying the current auto rule (skip known internally compressed file
