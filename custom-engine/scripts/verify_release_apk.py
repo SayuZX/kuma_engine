@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
@@ -16,7 +17,10 @@ from package_release_apk import inspect_archive
 
 
 MACHINE = {"arm64-v8a": "AArch64", "armeabi-v7a": "ARM"}
-ASSET_PATH = re.compile(rb"(?:assets|lib/assets)/[A-Za-z0-9_./-]+\.(?:png|jpg|jpeg|webp|json|ttf|otf|mp3|mp4)")
+ASSET_PATH = re.compile(
+    rb"(?:assets|lib/assets)/[A-Za-z0-9_./-]+\."
+    rb"(?:png|jpg|jpeg|webp|json|bin|svg|frag|js|html|ttf|otf|mp3|aac|mp4)"
+)
 
 
 def _run(*args: Path | str) -> str:
@@ -83,6 +87,7 @@ def verify(apk: Path, engine_src: Path, public_key: Path,
             _run(signer, "verify", "--input", payload, "--public", public_key)
             return {"abi": abi, "apk_bytes": apk.stat().st_size,
                     "payload_bytes": payload.stat().st_size,
+                    "payload_sha256": hashlib.sha256(payload.read_bytes()).hexdigest(),
                     "v2_signed": True, "payload_authenticated": True,
                     "dart_plaintext_path_count": dart_literal_count}
 

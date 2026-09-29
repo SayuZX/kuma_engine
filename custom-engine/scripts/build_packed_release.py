@@ -20,6 +20,7 @@ from zipfile import ZipFile
 
 from package_release_apk import inspect_archive, rewrite_unsigned_apk
 from verify_release_apk import verify
+from verify_packed_pair import verify_pair
 
 
 ABIS = {
@@ -249,12 +250,13 @@ def _build(args: argparse.Namespace) -> None:
                 if gradle_apk.is_file():
                     shutil.copy2(source, gradle_apk)
                 verify(source, engine_src, public_key, build_tools)
-            stale = apk_dir / "app-release.apk"
-            if stale.is_file():
-                stale.unlink()
-            stale_sha1 = apk_dir / "app-release.apk.sha1"
-            if stale_sha1.is_file():
-                stale_sha1.unlink()
+            for generated_root in (apk_dir, app / "build/app/outputs/apk/release"):
+                for stale_name in ("app-release.apk", "app-release.apk.sha1"):
+                    stale = generated_root / stale_name
+                    if stale.is_file():
+                        stale.unlink()
+
+            verify_pair(app, engine_src, public_key, build_tools)
 
             (app / "build/app/outputs/packed-release-report.json").write_text(
                 report_json, encoding="utf-8")
